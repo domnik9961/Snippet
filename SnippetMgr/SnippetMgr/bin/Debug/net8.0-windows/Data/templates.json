@@ -1,0 +1,49 @@
+﻿{
+  "tabs": [
+    {
+      "tab_name": "SQL Server",
+      "entries": [
+        {
+          "shortcut": "ds_kom",
+          "description": "Komentarz BIG",
+          "paste_text": "/***************************************\n***************************************/"
+        },
+        {
+          "shortcut": "Ctrl+Shift+2",
+          "description": "Powitanie wieczorne",
+          "paste_text": "Dobry wieczór,\nCieszę się, że się odezwałeś."
+        }
+      ]
+    },
+    {
+      "tab_name": "Podziękowania",
+      "entries": [
+        {
+          "shortcut": "Ctrl+Shift+3",
+          "description": "Podziękowanie za kontakt",
+          "paste_text": "Dziękuję za wiadomość! Skontaktuję się z Tobą wkrótce."
+        },
+        {
+          "shortcut": "Ctrl+Shift+4",
+          "description": "Podziękowanie za współpracę",
+          "paste_text": "Bardzo dziękujemy za udaną współpracę!"
+        }
+      ]
+    },
+    {
+      "tab_name": "Informacje",
+      "entries": [
+        {
+          "shortcut": "Ctrl+Shift+5",
+          "description": "Informacja o terminie realizacji",
+          "paste_text": "Przewidywany termin realizacji zamówienia to 3 dni robocze."
+        },
+        {
+          "shortcut": "Ctrl+Shift+6",
+          "description": "Informacja o godzinach pracy",
+          "paste_text": "Nasze biuro jest czynne od poniedziałku do piątku w godzinach 8:00–16:00."
+        }
+      ]
+    }
+  ]
+}
