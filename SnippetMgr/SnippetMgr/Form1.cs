@@ -7,8 +7,10 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using System.Drawing;
 using Microsoft.Data.SqlClient;
 
 namespace SnippetMgr
@@ -64,11 +66,20 @@ namespace SnippetMgr
         private System.Windows.Forms.Button _sqlBtnGenerate;
         private System.Windows.Forms.Button _sqlBtnCopy;
         private System.Windows.Forms.Button _sqlBtnSave;
-        private System.Windows.Forms.TextBox _sqlScript;
 
-        // NOWE: skryptowanie obiektu z tempdb po object_id
+        // skrypt
+        private System.Windows.Forms.RichTextBox _sqlScript;
+
+        // tempdb object_id
         private System.Windows.Forms.TextBox _sqlTempObjectId;
         private System.Windows.Forms.Button _sqlBtnScriptTemp;
+
+        // NOWE: pełny SELECT -> INSERT
+        private System.Windows.Forms.TextBox _sqlFullSelect;
+        private System.Windows.Forms.Button _sqlBtnFromSelect;
+
+        // flag do kolorowania
+        private bool _isHighlightingSql = false;
 
         public Form1()
         {
@@ -104,9 +115,6 @@ namespace SnippetMgr
         {
             if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID_WIN_Y)
             {
-                // Win+Y jako przełącznik:
-                // - jeśli okno zminimalizowane / niewidoczne -> pokaż, ustaw zakładkę 1 i pole Szukaj
-                // - jeśli widoczne -> zminimalizuj
                 if (this.WindowState == FormWindowState.Minimized || !this.Visible)
                 {
                     _lastActiveWindow = GetForegroundWindow();
@@ -129,7 +137,6 @@ namespace SnippetMgr
         {
             try
             {
-                // Zakładka nr 1: index 0 = SQL Script, index 1 = pierwsza zakładka z JSON
                 if (tabControl1.TabPages.Count > 1)
                 {
                     tabControl1.SelectedIndex = 1;
@@ -167,11 +174,10 @@ namespace SnippetMgr
                 if (File.Exists(_templatesPath))
                 {
                     string json = File.ReadAllText(_templatesPath, Encoding.UTF8);
-                    CreateTabsFromJson(json);   // w środku wczyta też config
+                    CreateTabsFromJson(json);
                 }
                 else
                 {
-                    // nawet bez pliku JSON chcemy mieć zakładkę SQL
                     EnsureSqlTabCreated();
                 }
 
@@ -196,7 +202,7 @@ namespace SnippetMgr
         // ====== Skróty klawiaturowe + ENTER ======
         private void Form1_KeyDown(object sender, KeyEventArgs e)
         {
-            // ENTER – uruchom zaznaczony wpis (tekst / aplikacja / folder) z aktywnej zakładki
+            // ENTER – uruchom zaznaczony wpis
             if (!e.Control && !e.Alt && !e.Shift && e.KeyCode == Keys.Enter)
             {
                 TabPage page = tabControl1.SelectedTab;
@@ -294,7 +300,6 @@ namespace SnippetMgr
         {
             try
             {
-                // nazwa profilu (opcjonalna)
                 if (root.TryGetProperty("configName", out JsonElement nameEl) &&
                     nameEl.ValueKind == JsonValueKind.String)
                 {
@@ -336,12 +341,10 @@ namespace SnippetMgr
                         }
                     }
 
-                    // jeśli podano serwer – spróbuj automatycznie połączyć
                     if (!string.IsNullOrWhiteSpace(server))
                     {
                         SqlConnect_Click(this, EventArgs.Empty);
 
-                        // jeśli połączenie się udało i baza jest na liście – ustaw jako domyślną
                         if (!string.IsNullOrWhiteSpace(defaultDb) &&
                             _sqlDatabases != null &&
                             _sqlDatabases.Items.Count > 0)
@@ -366,15 +369,13 @@ namespace SnippetMgr
                 {
                     bool? alwaysOnTop = GetBoolNullable(uiEl, "alwaysOnTop");
                     bool? startMinimized = GetBoolNullable(uiEl, "startMinimized");
-                    string hotkeyText = GetString(uiEl, "hotkey"); // na razie tylko do przyszłych zmian
+                    string hotkeyText = GetString(uiEl, "hotkey");
 
                     if (alwaysOnTop.HasValue)
                         this.TopMost = alwaysOnTop.Value;
 
                     if (startMinimized.HasValue && startMinimized.Value)
                         this.WindowState = FormWindowState.Minimized;
-
-                    // Hotkey zostawiamy jako Win+Y; w przyszłości można parsować hotkeyText
                 }
 
                 // --- config.behavior ---
@@ -430,14 +431,12 @@ namespace SnippetMgr
         // ====== Tworzenie zakładek z JSON (tabs) + config ======
         private void CreateTabsFromJson(string json)
         {
-            // najpierw upewniamy się, że zakładka SQL istnieje (potrzebujemy kontrolek do wczytania config.sql)
             EnsureSqlTabCreated();
 
             using (JsonDocument doc = JsonDocument.Parse(json))
             {
                 JsonElement root = doc.RootElement;
 
-                // wczytaj config (sql/ui/behavior)
                 LoadConfigFromRoot(root);
 
                 if (!root.TryGetProperty("tabs", out JsonElement tabsElement) ||
@@ -446,7 +445,6 @@ namespace SnippetMgr
                     throw new JsonException("Plik JSON nie zawiera prawidłowego pola 'tabs'.");
                 }
 
-                // czyścimy wszystkie zakładki, ale NIE tracimy referencji do _sqlPage
                 tabControl1.TabPages.Clear();
                 _tabBindings.Clear();
 
@@ -492,13 +490,11 @@ namespace SnippetMgr
                     DataTable table = new DataTable();
                     table.CaseSensitive = false;
 
-                    // kolumny podstawowe
                     table.Columns.Add("Shortcut", typeof(string));
                     table.Columns.Add("Description", typeof(string));
                     table.Columns.Add("Text", typeof(string));
 
-                    // dodatkowe kolumny dla typu "app" oraz "folder"
-                    table.Columns.Add("Type", typeof(string));        // "text" / "app" / "folder"
+                    table.Columns.Add("Type", typeof(string));
                     table.Columns.Add("AppName", typeof(string));
                     table.Columns.Add("AppPath", typeof(string));
                     table.Columns.Add("AppArgs", typeof(string));
@@ -612,7 +608,6 @@ namespace SnippetMgr
                     added++;
                 }
 
-                // na koniec – wstawiamy zakładkę SQL jako pierwszą
                 if (_sqlPage != null && !tabControl1.TabPages.Contains(_sqlPage))
                 {
                     tabControl1.TabPages.Insert(0, _sqlPage);
@@ -641,7 +636,7 @@ namespace SnippetMgr
                 type = "text";
             }
 
-            // ---- folder ----
+            // folder
             if (type == "folder")
             {
                 string folderPath = "";
@@ -687,7 +682,7 @@ namespace SnippetMgr
                 return;
             }
 
-            // ---- aplikacja ----
+            // app
             if (type == "app")
             {
                 string appPath = "";
@@ -744,7 +739,7 @@ namespace SnippetMgr
                 return;
             }
 
-            // ---- type = "text" – kopiuj i (jeśli się da) wklej do poprzedniego okna ----
+            // text
             string text = "";
             try
             {
@@ -839,7 +834,6 @@ namespace SnippetMgr
                 {
                     dlg.ShowDialog(this);
 
-                    // przeładuj tylko, jeśli JSON został zapisany
                     if (dlg.JsonChanged && File.Exists(_templatesPath))
                     {
                         string json = File.ReadAllText(_templatesPath, Encoding.UTF8);
@@ -999,7 +993,7 @@ namespace SnippetMgr
                 _sqlIncludeData.AutoSize = true;
                 _sqlIncludeData.Checked = true;
 
-                // NOWE: Object ID (tempdb) + przycisk
+                // Object ID (tempdb)
                 var lblTempObj = new System.Windows.Forms.Label();
                 lblTempObj.Text = "Object ID (tempdb):";
                 lblTempObj.Left = 200;
@@ -1025,8 +1019,34 @@ namespace SnippetMgr
                 panel.Controls.Add(_sqlTempObjectId);
                 panel.Controls.Add(_sqlBtnScriptTemp);
 
-                // Przesuwamy przyciski GENERUJ/KOPIUJ/ZAPISZ nieco niżej
-                int buttonsTop = _sqlWhere.Bottom + 36;
+                // NOWE: pełny SELECT
+                var lblFullSelect = new System.Windows.Forms.Label();
+                lblFullSelect.Text = "Pełny SELECT (do INSERT):";
+                lblFullSelect.Left = 10;
+                lblFullSelect.Top = _sqlIncludeData.Bottom + 8;
+                lblFullSelect.AutoSize = true;
+
+                _sqlFullSelect = new System.Windows.Forms.TextBox();
+                _sqlFullSelect.Left = 150;
+                _sqlFullSelect.Top = _sqlIncludeData.Bottom + 4;
+                _sqlFullSelect.Width = 430;
+                _sqlFullSelect.Height = 60;
+                _sqlFullSelect.Multiline = true;
+                _sqlFullSelect.ScrollBars = ScrollBars.Vertical;
+                _sqlFullSelect.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+                _sqlBtnFromSelect = new System.Windows.Forms.Button();
+                _sqlBtnFromSelect.Text = "Generuj z SELECT";
+                _sqlBtnFromSelect.Left = 10;
+                _sqlBtnFromSelect.Top = _sqlFullSelect.Bottom + 4;
+                _sqlBtnFromSelect.Width = 130;
+                _sqlBtnFromSelect.Click += SqlGenerateFromSelect_Click;
+
+                panel.Controls.Add(lblFullSelect);
+                panel.Controls.Add(_sqlFullSelect);
+                panel.Controls.Add(_sqlBtnFromSelect);
+
+                int buttonsTop = _sqlBtnFromSelect.Bottom + 8;
 
                 _sqlBtnGenerate = new System.Windows.Forms.Button();
                 _sqlBtnGenerate.Text = "Generuj skrypt";
@@ -1060,10 +1080,9 @@ namespace SnippetMgr
                 panel.Controls.Add(_sqlBtnCopy);
                 panel.Controls.Add(_sqlBtnSave);
 
-                _sqlScript = new System.Windows.Forms.TextBox();
+                _sqlScript = new System.Windows.Forms.RichTextBox();
                 _sqlScript.Multiline = true;
-                _sqlScript.ScrollBars = ScrollBars.Both;
-                _sqlScript.AcceptsReturn = true;
+                _sqlScript.ScrollBars = RichTextBoxScrollBars.Both;
                 _sqlScript.AcceptsTab = true;
                 _sqlScript.Left = 8;
                 _sqlScript.Top = _sqlBtnSave.Bottom + 8;
@@ -1071,11 +1090,11 @@ namespace SnippetMgr
                 _sqlScript.Height = panel.ClientSize.Height - (_sqlBtnSave.Bottom + 16);
                 _sqlScript.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
                 _sqlScript.Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericMonospace, 9f);
+                _sqlScript.TextChanged += SqlScript_TextChanged;
                 panel.Controls.Add(_sqlScript);
             }
             else
             {
-                // jeśli już istnieje – upewniamy się, że jest na pozycji 0
                 if (!tabControl1.TabPages.Contains(_sqlPage))
                 {
                     tabControl1.TabPages.Insert(0, _sqlPage);
@@ -1090,6 +1109,11 @@ namespace SnippetMgr
                     }
                 }
             }
+        }
+
+        private void SqlScript_TextChanged(object sender, EventArgs e)
+        {
+            ApplySqlSyntaxHighlighting();
         }
 
         private void UpdateSqlAuthControls()
@@ -1352,26 +1376,27 @@ namespace SnippetMgr
             {
                 MessageBox.Show(this, "Brak skryptu do zapisania.", "Informacja",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
             }
-
-            using (SaveFileDialog sfd = new SaveFileDialog())
+            else
             {
-                sfd.Filter = "Pliki SQL (*.sql)|*.sql|Wszystkie pliki (*.*)|*.*";
-
-                string dbName = _sqlDatabases != null && _sqlDatabases.SelectedItem != null
-                    ? _sqlDatabases.SelectedItem.ToString()
-                    : "DB";
-                string table = _sqlTables != null && _sqlTables.SelectedItem != null
-                    ? _sqlTables.SelectedItem.ToString()
-                    : "Table";
-
-                sfd.FileName = dbName + "_" + table + ".sql";
-
-                if (sfd.ShowDialog(this) == DialogResult.OK)
+                using (SaveFileDialog sfd = new SaveFileDialog())
                 {
-                    File.WriteAllText(sfd.FileName, _sqlScript.Text, Encoding.UTF8);
-                    SetStatus("SQL", "Zapisano do " + sfd.FileName + ".");
+                    sfd.Filter = "Pliki SQL (*.sql)|*.sql|Wszystkie pliki (*.*)|*.*";
+
+                    string dbName = _sqlDatabases != null && _sqlDatabases.SelectedItem != null
+                        ? _sqlDatabases.SelectedItem.ToString()
+                        : "DB";
+                    string table = _sqlTables != null && _sqlTables.SelectedItem != null
+                        ? _sqlTables.SelectedItem.ToString()
+                        : "Table";
+
+                    sfd.FileName = dbName + "_" + table + ".sql";
+
+                    if (sfd.ShowDialog(this) == DialogResult.OK)
+                    {
+                        File.WriteAllText(sfd.FileName, _sqlScript.Text, Encoding.UTF8);
+                        SetStatus("SQL", "Zapisano do " + sfd.FileName + ".");
+                    }
                 }
             }
         }
@@ -1479,7 +1504,109 @@ namespace SnippetMgr
             }
         }
 
-        // ==== Generowanie T-SQL (CREATE + INSERT) ====
+        // === NOWE: pełny SELECT -> INSERT ===
+        private void SqlGenerateFromSelect_Click(object sender, EventArgs e)
+        {
+            if (_sqlScript == null || _sqlFullSelect == null)
+                return;
+
+            _sqlScript.Clear();
+
+            if (string.IsNullOrEmpty(_sqlBaseConnectionString))
+            {
+                MessageBox.Show(this, "Najpierw połącz się z serwerem (Połącz).", "Informacja",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string selectText = _sqlFullSelect.Text;
+            if (string.IsNullOrWhiteSpace(selectText))
+            {
+                MessageBox.Show(this, "Wpisz pełne zapytanie SELECT.", "Informacja",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            try
+            {
+                string dbName = _sqlDatabases != null && _sqlDatabases.SelectedItem != null
+                    ? _sqlDatabases.SelectedItem.ToString()
+                    : "master";
+
+                string connStr = _sqlBaseConnectionString + "Database=" + dbName + ";";
+
+                DataTable dt = new DataTable();
+                using (SqlConnection conn = new SqlConnection(connStr))
+                using (SqlDataAdapter da = new SqlDataAdapter(selectText, conn))
+                {
+                    conn.Open();
+                    da.Fill(dt);
+                }
+
+                if (dt.Rows.Count == 0)
+                {
+                    _sqlScript.Text = "-- SELECT nie zwrócił żadnych wierszy.";
+                    return;
+                }
+
+                string targetTable = InferTargetTableNameFromSelect(selectText);
+
+                string script = GenerateInsertFromSelectResults(dt, targetTable, selectText);
+                _sqlScript.Text = script;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Błąd wykonania SELECT i generowania INSERT:\n" + ex.Message, "Błąd",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                SetStatus("SQL", "Błąd SELECT -> INSERT");
+            }
+        }
+
+        private string InferTargetTableNameFromSelect(string selectText)
+        {
+            if (string.IsNullOrWhiteSpace(selectText))
+                return null;
+
+            var match = Regex.Match(selectText, @"\bfrom\s+([^\s;\r\n]+)", RegexOptions.IgnoreCase);
+            if (!match.Success)
+                return null;
+
+            string token = match.Groups[1].Value.Trim();
+            token = token.TrimEnd(',', ')');
+            return token;
+        }
+
+        private string GenerateInsertFromSelectResults(DataTable dt, string targetTable, string originalSelect)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            sb.AppendLine("-- INSERT wygenerowany z SELECT:");
+            sb.AppendLine("-- " + originalSelect.Replace("\r", " ").Replace("\n", " "));
+            sb.AppendLine();
+
+            string tableName = string.IsNullOrWhiteSpace(targetTable) ? "<TWOJA_TABELA>" : targetTable;
+
+            string[] columnNames = new string[dt.Columns.Count];
+            for (int i = 0; i < dt.Columns.Count; i++)
+                columnNames[i] = "[" + dt.Columns[i].ColumnName + "]";
+            string columnList = string.Join(", ", columnNames);
+
+            foreach (DataRow row in dt.Rows)
+            {
+                string[] values = new string[dt.Columns.Count];
+                for (int c = 0; c < dt.Columns.Count; c++)
+                {
+                    values[c] = ToSqlLiteral(row[c], dt.Columns[c].DataType);
+                }
+
+                string valuesList = string.Join(", ", values);
+                sb.AppendLine("INSERT INTO " + tableName + " (" + columnList + ") VALUES (" + valuesList + ");");
+            }
+
+            return sb.ToString();
+        }
+
+        // ==== Generowanie T-SQL (CREATE + INSERT) ==== 
         private class ColumnInfo
         {
             public string Name { get; set; }
@@ -1599,7 +1726,7 @@ namespace SnippetMgr
             return sb.ToString();
         }
 
-        // NOWE: wersja dla tempdb.sys.tables po object_id
+        // tempdb.sys.tables po object_id
         private string GenerateCreateTableScriptForObjectId(SqlConnection conn, int objectId, string schema, string table)
         {
             List<ColumnInfo> columns = new List<ColumnInfo>();
@@ -1722,7 +1849,6 @@ namespace SnippetMgr
                 case "varbinary":
                     if (col.MaxLength == null || col.MaxLength <= 0)
                         return t + "(max)";
-
                     return t + "(" + (col.MaxLength == -1 ? "max" : col.MaxLength.ToString()) + ")";
 
                 case "decimal":
@@ -1833,6 +1959,65 @@ namespace SnippetMgr
             return "N'" + fallback + "'";
         }
 
+        // ====== Kolorowanie SQL ======
+        private void ApplySqlSyntaxHighlighting()
+        {
+            if (_sqlScript == null || _sqlScript.TextLength == 0)
+                return;
+
+            if (_isHighlightingSql)
+                return;
+
+            try
+            {
+                _isHighlightingSql = true;
+
+                int selStart = _sqlScript.SelectionStart;
+                int selLength = _sqlScript.SelectionLength;
+
+                _sqlScript.SuspendLayout();
+
+                _sqlScript.SelectionStart = 0;
+                _sqlScript.SelectionLength = _sqlScript.TextLength;
+                _sqlScript.SelectionColor = Color.Black;
+
+                // słowa kluczowe
+                HighlightPattern(@"\b(SELECT|FROM|WHERE|AND|OR|INNER|LEFT|RIGHT|FULL|JOIN|ON|GROUP|BY|ORDER|INSERT|INTO|VALUES|UPDATE|SET|DELETE|TOP|DISTINCT|AS|IS|NOT|NULL|IN|EXISTS|BETWEEN|LIKE|UNION|ALL|CASE|WHEN|THEN|ELSE|END|CREATE|TABLE|ALTER|DROP|PRIMARY|KEY|CLUSTERED|NONCLUSTERED|IDENTITY|CONSTRAINT|DEFAULT|FOREIGN|REFERENCES|INDEX|VIEW|PROCEDURE|FUNCTION|DECLARE|BEGIN|END|IF|WHILE|RETURN|USE|GO)\b",
+                                Color.Blue);
+
+                // typy danych
+                HighlightPattern(@"\b(INT|BIGINT|SMALLINT|TINYINT|DECIMAL|NUMERIC|MONEY|SMALLMONEY|FLOAT|REAL|DATE|DATETIME|DATETIME2|SMALLDATETIME|TIME|CHAR|NCHAR|VARCHAR|NVARCHAR|TEXT|NTEXT|BIT|BINARY|VARBINARY|IMAGE|UNIQUEIDENTIFIER|XML|CURSOR|SQL_VARIANT)\b",
+                                Color.DarkCyan);
+
+                // obiekty systemowe
+                HighlightPattern(@"\b(sys\.tables|sys\.columns|sys\.objects|sys\.schemas|sys\.indexes|sys\.index_columns|sys\.key_constraints|INFORMATION_SCHEMA\.[A-Z_]+)\b",
+                                Color.DarkMagenta);
+
+                // nazwy w nawiasach []
+                HighlightPattern(@"\[[^\]]+\]", Color.Brown);
+
+                _sqlScript.SelectionStart = selStart;
+                _sqlScript.SelectionLength = selLength;
+                _sqlScript.SelectionColor = Color.Black;
+
+                _sqlScript.ResumeLayout();
+            }
+            finally
+            {
+                _isHighlightingSql = false;
+            }
+        }
+
+        private void HighlightPattern(string pattern, Color color)
+        {
+            foreach (Match m in Regex.Matches(_sqlScript.Text, pattern, RegexOptions.IgnoreCase))
+            {
+                _sqlScript.SelectionStart = m.Index;
+                _sqlScript.SelectionLength = m.Length;
+                _sqlScript.SelectionColor = color;
+            }
+        }
+
         // ====== Pomocnicze ======
         private class TabBinding
         {
@@ -1841,4 +2026,3 @@ namespace SnippetMgr
         }
     }
 }
-    
