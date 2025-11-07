@@ -1,12 +1,26 @@
-﻿using System.Drawing;
-using System.Windows.Forms;
-
-namespace SnippetMgr
+﻿namespace SnippetMgr
 {
     partial class Form1
     {
+        /// <summary>
+        ///  Required designer variable.
+        /// </summary>
         private System.ComponentModel.IContainer components = null;
 
+        private System.Windows.Forms.MenuStrip menuStrip1;
+        private System.Windows.Forms.ToolStripMenuItem jsonToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem zarzadzajToolStripMenuItem;
+        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.TextBox textBox1;
+        private System.Windows.Forms.TabControl tabControl1;
+        private System.Windows.Forms.StatusStrip statusStrip1;
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel1;
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel2;
+
+        /// <summary>
+        ///  Clean up any resources being used.
+        /// </summary>
+        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -18,197 +32,124 @@ namespace SnippetMgr
 
         #region Windows Form Designer generated code
 
+        /// <summary>
+        ///  Required method for Designer support - do not modify
+        ///  the contents of this method with the code editor.
+        /// </summary>
         private void InitializeComponent()
         {
-            components = new System.ComponentModel.Container();
-
-            // === Top menu ===
             menuStrip1 = new MenuStrip();
-            opcjeToolStripMenuItem = new ToolStripMenuItem();
-            jSONToolStripMenuItem = new ToolStripMenuItem();
+            jsonToolStripMenuItem = new ToolStripMenuItem();
             zarzadzajToolStripMenuItem = new ToolStripMenuItem();
-            exitToolStripMenuItem = new ToolStripMenuItem();
-
-            // === Layout ===
-            mainLayout = new TableLayoutPanel();
-            searchLayout = new TableLayoutPanel();
-
-            // === Controls ===
-            lblSearch = new Label();
+            label1 = new Label();
             textBox1 = new TextBox();
             tabControl1 = new TabControl();
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
             toolStripStatusLabel2 = new ToolStripStatusLabel();
-
-            // =========================
-            // MenuStrip (kompakt + ciemny motyw)
-            // =========================
-            menuStrip1.ImageScalingSize = new Size(18, 18);
+            menuStrip1.SuspendLayout();
+            statusStrip1.SuspendLayout();
+            SuspendLayout();
+            // 
+            // menuStrip1
+            // 
+            menuStrip1.ImageScalingSize = new Size(20, 20);
+            menuStrip1.Items.AddRange(new ToolStripItem[] { jsonToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
+            menuStrip1.Padding = new Padding(5, 2, 0, 2);
+            menuStrip1.Size = new Size(861, 24);
             menuStrip1.TabIndex = 0;
             menuStrip1.Text = "menuStrip1";
-            menuStrip1.RenderMode = ToolStripRenderMode.Professional;
-            menuStrip1.BackColor = Color.FromArgb(33, 37, 41);
-            menuStrip1.ForeColor = Color.White;
-            menuStrip1.Hide();
-
-            // "Plik"
-            opcjeToolStripMenuItem.Name = "opcjeToolStripMenuItem";
-            opcjeToolStripMenuItem.Text = "Plik";
-            opcjeToolStripMenuItem.ForeColor = Color.White;
-
-            // "Zarządzaj JSON…"
+            // 
+            // jsonToolStripMenuItem
+            // 
+            jsonToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { zarzadzajToolStripMenuItem });
+            jsonToolStripMenuItem.Name = "jsonToolStripMenuItem";
+            jsonToolStripMenuItem.Size = new Size(47, 20);
+            jsonToolStripMenuItem.Text = "JSON";
+            // 
+            // zarzadzajToolStripMenuItem
+            // 
             zarzadzajToolStripMenuItem.Name = "zarzadzajToolStripMenuItem";
-            zarzadzajToolStripMenuItem.Text = "Zarządzaj JSON…";
-            zarzadzajToolStripMenuItem.ForeColor = Color.Black; // w dropdownie jasne tło
-            // Handler masz w Form1.cs — podpinamy:
-            zarzadzajToolStripMenuItem.Click += zarzadzajToolStripMenuItem_Click;
-
-            // "Wyjście"
-        //    exitToolStripMenuItem.Name = "exitToolStripMenuItem";
-      //      exitToolStripMenuItem.Text = "Wyjście";
-    //        exitToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.F4;
-  //          exitToolStripMenuItem.ForeColor = Color.Black;
-//            exitToolStripMenuItem.Click += (_, __) => Close();
-
-            opcjeToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[]
-            {
-                zarzadzajToolStripMenuItem,
-                new ToolStripSeparator(),
-                exitToolStripMenuItem
-            });
-
-            // "Widok" (placeholder)
-            jSONToolStripMenuItem.Name = "jSONToolStripMenuItem";
-            jSONToolStripMenuItem.Text = "Widok";
-            jSONToolStripMenuItem.ForeColor = Color.White;
-
-            // Dodaj do menu głównego
-            menuStrip1.Items.AddRange(new ToolStripItem[]
-            {
-                opcjeToolStripMenuItem,
-                jSONToolStripMenuItem
-            });
-
-            // =========================
-            // Główny layout (kompaktowo)
-            // =========================
-            mainLayout.ColumnCount = 1;
-            mainLayout.RowCount = 2; // 0: pasek szukaj, 1: taby
-            mainLayout.Name = "mainLayout";
-            mainLayout.Dock = DockStyle.Fill;
-            mainLayout.Padding = new Padding(6); // ciaśniej
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            // =========================
-            // Pasek wyszukiwania (kompakt + kolor tła)
-            // =========================
-            searchLayout.ColumnCount = 2;
-            searchLayout.RowCount = 1;
-            searchLayout.Dock = DockStyle.Top;
-            searchLayout.AutoSize = true;
-            searchLayout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            searchLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));       // label
-            searchLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));  // textbox fill
-            searchLayout.Padding = new Padding(6);
-            searchLayout.Margin = new Padding(0, 4, 0, 6);
-            searchLayout.BackColor = Color.FromArgb(245, 248, 255); // delikatny niebieskawy panel
-
-            // Label "Szukaj:"
-            lblSearch.AutoSize = true;
-            lblSearch.Margin = new Padding(0, 3, 8, 0);
-            lblSearch.Name = "lblSearch";
-            lblSearch.Text = "Szukaj:";
-            lblSearch.ForeColor = Color.FromArgb(52, 58, 64);
-
-            // TextBox (pełna szerokość, mniejszy)
+            zarzadzajToolStripMenuItem.Size = new Size(174, 22);
+            zarzadzajToolStripMenuItem.Text = "Zarządzaj plikiem...";
+            // 
+            // label1
+            // 
+            label1.AutoSize = true;
+            label1.Location = new Point(10, 27);
+            label1.Name = "label1";
+            label1.Size = new Size(43, 15);
+            label1.TabIndex = 1;
+            label1.Text = "Szukaj:";
+            // 
+            // textBox1
+            // 
             textBox1.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            textBox1.Margin = new Padding(0, 0, 0, 0);
+            textBox1.Location = new Point(64, 25);
+            textBox1.Margin = new Padding(3, 2, 3, 2);
             textBox1.Name = "textBox1";
-            textBox1.PlaceholderText = "Wpisz, aby przefiltrować…";
-            textBox1.TabIndex = 0;
-            textBox1.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-            textBox1.MinimumSize = new Size(200, 0);
-
-            searchLayout.Controls.Add(lblSearch, 0, 0);
-            searchLayout.Controls.Add(textBox1, 1, 0);
-
-            // =========================
-            // TabControl (wypełnia, kompaktowe marginesy)
-            // =========================
-            tabControl1.Dock = DockStyle.Fill;
+            textBox1.Size = new Size(787, 23);
+            textBox1.TabIndex = 2;
+            // 
+            // tabControl1
+            // 
+            tabControl1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            tabControl1.Location = new Point(10, 50);
+            tabControl1.Margin = new Padding(3, 2, 3, 2);
             tabControl1.Name = "tabControl1";
-            tabControl1.TabIndex = 1;
-            tabControl1.Margin = new Padding(0);
-
-            // =========================
-            // StatusStrip (kompakt + lekki kolor)
-            // =========================
+            tabControl1.SelectedIndex = 0;
+            tabControl1.Size = new Size(840, 529);
+            tabControl1.TabIndex = 3;
+            // 
+            // statusStrip1
+            // 
+            statusStrip1.ImageScalingSize = new Size(20, 20);
+            statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripStatusLabel1, toolStripStatusLabel2 });
+            statusStrip1.Location = new Point(0, 578);
             statusStrip1.Name = "statusStrip1";
-            statusStrip1.Dock = DockStyle.Bottom;
-            statusStrip1.SizingGrip = false;
-            statusStrip1.BackColor = Color.FromArgb(245, 245, 248);
-            statusStrip1.ForeColor = Color.FromArgb(73, 80, 87);
-            statusStrip1.ImageScalingSize = new Size(16, 16);
-
+            statusStrip1.Padding = new Padding(1, 0, 12, 0);
+            statusStrip1.Size = new Size(861, 22);
+            statusStrip1.TabIndex = 4;
+            statusStrip1.Text = "statusStrip1";
+            // 
+            // toolStripStatusLabel1
+            // 
             toolStripStatusLabel1.Name = "toolStripStatusLabel1";
-            toolStripStatusLabel1.Text = ""; // lewy komunikat
-
+            toolStripStatusLabel1.Size = new Size(42, 17);
+            toolStripStatusLabel1.Text = "Status:";
+            // 
+            // toolStripStatusLabel2
+            // 
             toolStripStatusLabel2.Name = "toolStripStatusLabel2";
-            toolStripStatusLabel2.Spring = true; // wypchnij do prawej
-            toolStripStatusLabel2.TextAlign = ContentAlignment.MiddleRight;
-
-            statusStrip1.Items.AddRange(new ToolStripItem[]
-            {
-                toolStripStatusLabel1,
-                toolStripStatusLabel2
-            });
-
-            // =========================
-            // Złożenie całości
-            // =========================
-            mainLayout.Controls.Add(searchLayout, 0, 0);
-            mainLayout.Controls.Add(tabControl1, 0, 1);
-
-            // Form (kompakt)
-            AutoScaleDimensions = new SizeF(96F, 96F);
-            AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(640, 420);
-            Controls.Add(mainLayout);
+            toolStripStatusLabel2.Size = new Size(23, 17);
+            toolStripStatusLabel2.Text = "OK";
+            // 
+            // Form1
+            // 
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(861, 600);
             Controls.Add(statusStrip1);
+            Controls.Add(tabControl1);
+            Controls.Add(textBox1);
+            Controls.Add(label1);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
-            MinimumSize = new Size(560, 360);
+            Margin = new Padding(3, 2, 3, 2);
+            MinimumSize = new Size(702, 310);
             Name = "Form1";
-            StartPosition = FormStartPosition.CenterScreen;
-            Text = "SnippetMgr — szybkie wklejki";
+            Text = "SnippetMgr + SQL Script";
+            menuStrip1.ResumeLayout(false);
+            menuStrip1.PerformLayout();
+            statusStrip1.ResumeLayout(false);
+            statusStrip1.PerformLayout();
+            ResumeLayout(false);
+            PerformLayout();
 
-            // Porządek z-index
-            menuStrip1.BringToFront();
-            statusStrip1.BringToFront();
         }
 
         #endregion
-
-        // === Pola ===
-        private MenuStrip menuStrip1;
-        private ToolStripMenuItem opcjeToolStripMenuItem;
-        private ToolStripMenuItem jSONToolStripMenuItem;
-        private ToolStripMenuItem zarzadzajToolStripMenuItem;
-        private ToolStripMenuItem exitToolStripMenuItem;
-
-        private TableLayoutPanel mainLayout;
-        private TableLayoutPanel searchLayout;
-        private Label lblSearch;
-
-        private TextBox textBox1;
-        private TabControl tabControl1;
-
-        private StatusStrip statusStrip1;
-        private ToolStripStatusLabel toolStripStatusLabel1;
-        private ToolStripStatusLabel toolStripStatusLabel2;
     }
 }

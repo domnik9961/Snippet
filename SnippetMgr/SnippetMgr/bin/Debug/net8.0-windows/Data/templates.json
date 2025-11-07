@@ -1,14 +1,39 @@
 ﻿{
+  "configName": "DEV-Profil",
+  "config": {
+    "sql": {
+      "server": "XYZ\\SQLEXPRESS",
+      "useWindowsAuth": true,
+      "user": "",
+      "password": "",
+      "useTempTables": true,
+      "tempTablePrefix": "#",
+      "defaultDatabase": "MojaDomyslnaBaza"
+    },
+    "ui": {
+      "startMinimized": false,
+      "alwaysOnTop": false,
+      "hotkey": "Win+Y"
+    },
+    "behavior": {
+      "autoPasteOnSnippetSelect": true,
+      "rememberLastTab": false,
+      "clearSearchOnTabChange": true,
+      "focusSearchOnTabChange": true
+    }
+  },
   "tabs": [
     {
       "tab_name": "SQL Server",
       "entries": [
         {
+          "type": "text",
           "shortcut": "ds_kom",
           "description": "Komentarz BIG",
           "paste_text": "/***************************************\n***************************************/"
         },
         {
+          "type": "text",
           "shortcut": "Ctrl+Shift+2",
           "description": "Powitanie wieczorne",
           "paste_text": "Dobry wieczór,\nCieszę się, że się odezwałeś."
@@ -16,32 +41,60 @@
       ]
     },
     {
-      "tab_name": "Podziękowania",
+      "tab_name": "Aplikacje",
       "entries": [
         {
-          "shortcut": "Ctrl+Shift+3",
-          "description": "Podziękowanie za kontakt",
-          "paste_text": "Dziękuję za wiadomość! Skontaktuję się z Tobą wkrótce."
+          "type": "app",
+          "shortcut": "calc",
+          "app_name": "Kalkulator Windows",
+          "description": "Systemowy kalkulator",
+          "app_path": "C:\\Windows\\System32\\calc.exe",
+          "app_args": "",
+          "working_dir": "",
+          "run_as_admin": false
         },
         {
-          "shortcut": "Ctrl+Shift+4",
-          "description": "Podziękowanie za współpracę",
-          "paste_text": "Bardzo dziękujemy za udaną współpracę!"
+          "type": "app",
+          "shortcut": "notepad",
+          "app_name": "Notatnik",
+          "description": "Windows Notepad",
+          "app_path": "C:\\Windows\\System32\\notepad.exe",
+          "app_args": "",
+          "working_dir": "",
+          "run_as_admin": false
+        },
+        {
+          "type": "app",
+          "shortcut": "ssms_dev",
+          "app_name": "SQL Server Management Studio",
+          "description": "SSMS – serwer DEV",
+          "app_path": "C:\\Program Files (x86)\\Microsoft SQL Server Management Studio 19\\Common7\\IDE\\Ssms.exe",
+          "app_args": "",
+          "working_dir": "",
+          "run_as_admin": true
         }
       ]
     },
     {
-      "tab_name": "Informacje",
+      "tab_name": "Foldery",
       "entries": [
         {
-          "shortcut": "Ctrl+Shift+5",
-          "description": "Informacja o terminie realizacji",
-          "paste_text": "Przewidywany termin realizacji zamówienia to 3 dni robocze."
+          "type": "folder",
+          "shortcut": "proj_root",
+          "description": "Folder główny projektu",
+          "folder_path": "C:\\Projekty\\MojaAplikacja"
         },
         {
-          "shortcut": "Ctrl+Shift+6",
-          "description": "Informacja o godzinach pracy",
-          "paste_text": "Nasze biuro jest czynne od poniedziałku do piątku w godzinach 8:00–16:00."
+          "type": "folder",
+          "shortcut": "docs",
+          "description": "Dokumentacja projektu",
+          "folder_path": "C:\\Projekty\\MojaAplikacja\\Doc"
+        },
+        {
+          "type": "folder",
+          "shortcut": "downloads",
+          "description": "Pobrane",
+          "folder_path": "C:\\Users\\TwojUser\\Downloads"
         }
       ]
     }

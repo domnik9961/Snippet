@@ -1,1246 +1,1844 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data;              // DataTable, DataView
-using System.Diagnostics;       // Process
-using System.Drawing;           // SystemIcons
+using System.Data;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices; // P/Invoke
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Threading.Tasks;   // Task, async/await
+using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Data.SqlClient;
 
 namespace SnippetMgr
 {
     public partial class Form1 : Form
     {
-        private const int MaxTabs = 9;
-        private const int StatusRightMaxLen = 100;
-
-        // ===== WinAPI / Hotkeys / Clipboard =====
+        // ====== Globalny skrót Win+Y ======
         private const int WM_HOTKEY = 0x0312;
-        private const int WM_SYSKEYDOWN = 0x0104;
-        private const int WM_SYSKEYUP = 0x0105;
-        private const int WM_CLIPBOARDUPDATE = 0x031D;
-        private const int SW_RESTORE = 9;
-
-        private const uint MOD_ALT = 0x0001;
-        private const uint MOD_CONTROL = 0x0002;
-        private const uint MOD_SHIFT = 0x0004;
+        private const int HOTKEY_ID_WIN_Y = 1;
         private const uint MOD_WIN = 0x0008;
 
-        private const int ID_HOTKEY_PRIMARY = 9000;  // Win+Y
-        private const int ID_HOTKEY_FALLBACK = 9001;  // Ctrl+Alt+Y
-        private const int ID_HOTKEY_HISTORY = 9002;  // Win+`
-        private const int ID_HOTKEY_HISTORY_FB = 9003;  // Ctrl+Alt+`
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
-        [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, Keys vk);
-        [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
-        [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-        [DllImport("user32.dll")] private static extern bool AddClipboardFormatListener(IntPtr hwnd);
-        [DllImport("user32.dll")] private static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
-        private bool _primaryRegistered = false;
-        private bool _fallbackRegistered = false;
-        private bool _histRegistered = false;
-        private bool _histRegisteredFb = false;
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
 
-        // === Clipboard collection ===
-        private bool _suppressNextClipboardCapture = false;
-        private const int ClipboardMaxLen = 20000; // ogranicz bardzo długie bloki
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-        // ===== Tray =====
-        private NotifyIcon? _tray;
-        private ContextMenuStrip? _trayMenu;
+        private IntPtr _lastActiveWindow = IntPtr.Zero;
 
-        // ===== Pliki =====
-        private string TemplatesPath => Path.Combine(AppContext.BaseDirectory, "Data", "templates.json");
-        private string HistoryPath => Path.Combine(AppContext.BaseDirectory, "Data", "copied_history.json");
+        // ====== Snippet manager ======
+        private const int MaxTabs = 9;
+        private readonly Dictionary<TabPage, TabBinding> _tabBindings = new Dictionary<TabPage, TabBinding>();
 
-        // ===== Historia (tab + grid + tabela + toolbar) =====
-        private TabPage? _historyPage;
-        private DataGridView? _historyGrid;
-        private DataTable? _historyTable;
+        private readonly string _templatesPath;
 
-        // toolbar (tylko dla „Historia”)
-        private ToolStrip? _histToolbar;
-        private ToolStripTextBox? _histSearch;
-        private CheckBox? _histOnlyPinned;
-        private NumericUpDown? _histMinUses;
-        private ComboBox? _histSort;
+        // ====== konfiguracja (z sekcji "config") ======
+        private string _currentConfigName;
+        private bool _autoPasteOnSnippetSelect = true;
+        private bool _rememberLastTab = false;
+        private bool _clearSearchOnTabChange = true;
+        private bool _focusSearchOnTabChange = true;
+
+        // ====== SQL Script zakładka ======
+        private TabPage _sqlPage;
+        private string _sqlBaseConnectionString;
+
+        private System.Windows.Forms.TextBox _sqlServer;
+        private System.Windows.Forms.RadioButton _sqlRbWindows;
+        private System.Windows.Forms.RadioButton _sqlRbSqlAuth;
+        private System.Windows.Forms.TextBox _sqlUser;
+        private System.Windows.Forms.TextBox _sqlPassword;
+        private System.Windows.Forms.ComboBox _sqlDatabases;
+        private System.Windows.Forms.ComboBox _sqlTables;
+        private System.Windows.Forms.TextBox _sqlWhere;
+        private System.Windows.Forms.CheckBox _sqlIncludeData;
+        private System.Windows.Forms.Button _sqlBtnConnect;
+        private System.Windows.Forms.Button _sqlBtnGenerate;
+        private System.Windows.Forms.Button _sqlBtnCopy;
+        private System.Windows.Forms.Button _sqlBtnSave;
+        private System.Windows.Forms.TextBox _sqlScript;
+
+        // NOWE: skryptowanie obiektu z tempdb po object_id
+        private System.Windows.Forms.TextBox _sqlTempObjectId;
+        private System.Windows.Forms.Button _sqlBtnScriptTemp;
 
         public Form1()
         {
             InitializeComponent();
 
-            try { statusStrip1.ShowItemToolTips = true; } catch { }
-
-            SetupTray();
+            _templatesPath = Path.Combine(AppContext.BaseDirectory, "Data", "templates.json");
 
             this.Load += Form1_Load;
 
+            // Skróty i ENTER na poziomie formularza
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
 
-            textBox1.TextChanged += textBox1_TextChanged;
-            textBox1.KeyDown += textBox1_KeyDown;
-
+            textBox1.TextChanged += (s, e) => ApplyFilterToActiveTab();
             tabControl1.SelectedIndexChanged += TabControl1_SelectedIndexChanged;
 
-            try { this.MainMenuStrip = this.menuStrip1; } catch { }
+            zarzadzajToolStripMenuItem.Click += ZarzadzajToolStripMenuItem_Click;
 
-            this.Shown += (s, e) => FocusSearch();
-            this.Activated += (s, e) => FocusSearch(false);
+            SetStatus("Start", "Gotowy");
         }
 
-        // ===== Helper: ustaw kursor w textBox1 =====
-        private void FocusSearch(bool selectAll = true)
+        protected override void OnFormClosed(FormClosedEventArgs e)
         {
             try
             {
-                if (textBox1.CanFocus)
-                {
-                    textBox1.Focus();
-                    if (selectAll) textBox1.SelectAll();
-                    else textBox1.Select(textBox1.TextLength, 0);
-                }
-                this.ActiveControl = textBox1;
+                UnregisterHotKey(this.Handle, HOTKEY_ID_WIN_Y);
             }
             catch { }
+            base.OnFormClosed(e);
         }
 
-        // ===== Rejestracja globalnych skrótów + clipboard listener =====
-        protected override void OnHandleCreated(EventArgs e)
-        {
-            base.OnHandleCreated(e);
-            TryRegisterHotkeys();
-            try { AddClipboardFormatListener(this.Handle); } catch { }
-        }
-
-        protected override void OnHandleDestroyed(EventArgs e)
-        {
-            try { RemoveClipboardFormatListener(this.Handle); } catch { }
-            try { if (_primaryRegistered) UnregisterHotKey(this.Handle, ID_HOTKEY_PRIMARY); } catch { }
-            try { if (_fallbackRegistered) UnregisterHotKey(this.Handle, ID_HOTKEY_FALLBACK); } catch { }
-            try { if (_histRegistered) UnregisterHotKey(this.Handle, ID_HOTKEY_HISTORY); } catch { }
-            try { if (_histRegisteredFb) UnregisterHotKey(this.Handle, ID_HOTKEY_HISTORY_FB); } catch { }
-            base.OnHandleDestroyed(e);
-        }
-
-        private void TryRegisterHotkeys()
-        {
-            // Win+Y toggle
-            _primaryRegistered = RegisterHotKey(this.Handle, ID_HOTKEY_PRIMARY, MOD_WIN, Keys.Y);
-            if (!_primaryRegistered)
-            {
-                _fallbackRegistered = RegisterHotKey(this.Handle, ID_HOTKEY_FALLBACK, MOD_CONTROL | MOD_ALT, Keys.Y);
-                if (_fallbackRegistered)
-                {
-                    BeginInvoke(new Action(() =>
-                        MessageBox.Show(this, "Win+Y jest zajęty przez system. Użyj Ctrl+Alt+Y.",
-                            "Skrót alternatywny", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                    ));
-                }
-                else
-                {
-                    BeginInvoke(new Action(() =>
-                        MessageBox.Show(this, "Nie udało się zarejestrować skrótów Win+Y ani Ctrl+Alt+Y.",
-                            "Błąd rejestracji", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-                    ));
-                }
-            }
-
-            // Win+`
-            _histRegistered = RegisterHotKey(this.Handle, ID_HOTKEY_HISTORY, MOD_WIN, Keys.Oem3);
-            if (!_histRegistered)
-            {
-                _histRegisteredFb = RegisterHotKey(this.Handle, ID_HOTKEY_HISTORY_FB, MOD_CONTROL | MOD_ALT, Keys.Oem3);
-                if (_histRegisteredFb)
-                {
-                    BeginInvoke(new Action(() =>
-                        MessageBox.Show(this, "Win+` jest zajęty. Użyj Ctrl+Alt+` aby otworzyć Historię.",
-                            "Skrót alternatywny", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                    ));
-                }
-                else
-                {
-                    BeginInvoke(new Action(() =>
-                        MessageBox.Show(this, "Nie udało się zarejestrować skrótów do Historii (Win+` / Ctrl+Alt+`).",
-                            "Błąd rejestracji", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-                    ));
-                }
-            }
-        }
-
-        // ========= ALT + 1..9 =========
-        private void Form1_KeyDown(object? sender, KeyEventArgs e)
-        {
-            if (e.Alt && e.KeyCode >= Keys.D1 && e.KeyCode <= Keys.D9)
-            {
-                int index = e.KeyCode - Keys.D1;
-                if (index < tabControl1.TabPages.Count)
-                {
-                    tabControl1.SelectedIndex = index;
-                    e.Handled = true;
-                    ApplyFilterToActiveTab(textBox1.Text);
-                    BeginInvoke(new Action(() => FocusSearch(false)));
-                }
-            }
-        }
-
-        // ===== Obsługa komunikatów okna =====
         protected override void WndProc(ref Message m)
         {
-            // Globalne hotkeye
-            if (m.Msg == WM_HOTKEY)
+            if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID_WIN_Y)
             {
-                int id = m.WParam.ToInt32();
-                if (id == ID_HOTKEY_PRIMARY || id == ID_HOTKEY_FALLBACK)
+                // Win+Y jako przełącznik:
+                // - jeśli okno zminimalizowane / niewidoczne -> pokaż, ustaw zakładkę 1 i pole Szukaj
+                // - jeśli widoczne -> zminimalizuj
+                if (this.WindowState == FormWindowState.Minimized || !this.Visible)
                 {
-                    ToggleWindow();
-                    return;
+                    _lastActiveWindow = GetForegroundWindow();
+
+                    this.Show();
+                    this.WindowState = FormWindowState.Normal;
+                    this.Activate();
+                    ActivateMainTabAndSearch();
                 }
-                if (id == ID_HOTKEY_HISTORY || id == ID_HOTKEY_HISTORY_FB)
+                else
                 {
-                    ShowAndActivate();
-                    EnsureHistoryTabCreated();
-                    if (_historyPage != null)
-                    {
-                        tabControl1.SelectedTab = _historyPage;
-                        BeginInvoke(new Action(() =>
-                        {
-                            _historyGrid?.Focus();
-                            if (_historyGrid != null && _historyGrid.Rows.Count > 0)
-                            {
-                                _historyGrid.ClearSelection();
-                                _historyGrid.Rows[0].Selected = true;
-                            }
-                        }));
-                    }
-                    return;
+                    this.WindowState = FormWindowState.Minimized;
                 }
-            }
-
-            // Nasłuch schowka
-            if (m.Msg == WM_CLIPBOARDUPDATE)
-            {
-                TryCaptureClipboard();
-                base.WndProc(ref m);
-                return;
-            }
-
-            // Wyłącz „Alt otwiera menu”
-            if ((m.Msg == WM_SYSKEYDOWN || m.Msg == WM_SYSKEYUP) && (Keys)m.WParam == Keys.Menu)
-            {
-                FocusSearch(false);
-                return;
             }
 
             base.WndProc(ref m);
         }
 
-        // Zbieranie wszystkiego ze schowka (tekst)
-        private void TryCaptureClipboard()
+        private void ActivateMainTabAndSearch()
         {
             try
             {
-                if (_suppressNextClipboardCapture)
+                // Zakładka nr 1: index 0 = SQL Script, index 1 = pierwsza zakładka z JSON
+                if (tabControl1.TabPages.Count > 1)
                 {
-                    _suppressNextClipboardCapture = false; // pomiń jednorazowo nasz własny SetText
-                    return;
+                    tabControl1.SelectedIndex = 1;
                 }
 
-                if (Clipboard.ContainsText())
+                if (textBox1 != null)
                 {
-                    string txt = Clipboard.GetText() ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(txt)) return;
-                    if (txt.Length > ClipboardMaxLen) txt = txt.Substring(0, ClipboardMaxLen);
-
-                    AddOrBumpHistory(txt, DateTime.Now, pinned: false, increaseUse: 1);
-                    SaveHistoryToDisk();
+                    textBox1.Text = string.Empty;
+                    textBox1.Focus();
                 }
+
+                ApplyFilterToActiveTab();
             }
             catch
             {
-                // schowek może być chwilowo zajęty przez inne procesy – pomijamy
             }
         }
 
-        private void ToggleWindow()
-        {
-            bool isActive = this.Visible &&
-                            this.WindowState != FormWindowState.Minimized &&
-                            Form.ActiveForm == this;
-
-            if (isActive) HideToTray(); else ShowAndActivate();
-        }
-
-        private void HideToTray()
-        {
-            this.Hide();
-            this.ShowInTaskbar = false;
-            if (this.WindowState != FormWindowState.Minimized)
-                this.WindowState = FormWindowState.Minimized;
-        }
-
-        private void ShowAndActivate()
-        {
-            if (!this.Visible) this.Show();
-            this.ShowInTaskbar = true;
-
-            if (this.WindowState == FormWindowState.Minimized)
-                this.WindowState = FormWindowState.Normal;
-
-            ShowWindow(this.Handle, SW_RESTORE);
-
-            bool wasTopMost = this.TopMost;
-            this.TopMost = true;
-            this.TopMost = wasTopMost;
-
-            SetForegroundWindow(this.Handle);
-            this.Activate();
-            this.BringToFront();
-            this.Focus();
-
-            FocusSearch(false);
-        }
-
-        // ===== Tray =====
-        private void SetupTray()
-        {
-            _trayMenu = new ContextMenuStrip();
-            _trayMenu.Items.Add("Pokaż okno", null, (_, __) => ShowAndActivate());
-            _trayMenu.Items.Add("Przejdź do historii (Win+`)", null, (_, __) =>
-            {
-                ShowAndActivate();
-                EnsureHistoryTabCreated();
-                if (_historyPage != null) tabControl1.SelectedTab = _historyPage;
-            });
-            _trayMenu.Items.Add("Ukryj", null, (_, __) => HideToTray());
-            _trayMenu.Items.Add(new ToolStripSeparator());
-            _trayMenu.Items.Add("Zakończ", null, (_, __) => Close());
-
-            _tray = new NotifyIcon
-            {
-                Icon = SystemIcons.Application,
-                Visible = true,
-                Text = "SnippetMgr (Win+Y / Ctrl+Alt+Y, Win+` / Ctrl+Alt+`)",
-                ContextMenuStrip = _trayMenu
-            };
-            _tray.DoubleClick += (_, __) => ShowAndActivate();
-        }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            try { if (_primaryRegistered) UnregisterHotKey(this.Handle, ID_HOTKEY_PRIMARY); } catch { }
-            try { if (_fallbackRegistered) UnregisterHotKey(this.Handle, ID_HOTKEY_FALLBACK); } catch { }
-            try { if (_histRegistered) UnregisterHotKey(this.Handle, ID_HOTKEY_HISTORY); } catch { }
-            try { if (_histRegisteredFb) UnregisterHotKey(this.Handle, ID_HOTKEY_HISTORY_FB); } catch { }
-            try { RemoveClipboardFormatListener(this.Handle); } catch { }
-
-            if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
-            _trayMenu?.Dispose();
-            base.OnFormClosing(e);
-        }
-
-        // ===== menu: Zarządzaj… — PRZEŁADUJ JSON =====
-        private void zarzadzajToolStripMenuItem_Click(object sender, EventArgs e)
+        private void Form1_Load(object sender, EventArgs e)
         {
             try
             {
+                bool hotkeyOk = RegisterHotKey(this.Handle, HOTKEY_ID_WIN_Y, MOD_WIN, (uint)Keys.Y);
+                if (!hotkeyOk)
+                {
+                    SetStatus("Hotkey", "Win+Y zajęty (niezarejestrowany)");
+                }
+                else
+                {
+                    SetStatus("Hotkey", "Win+Y aktywny");
+                }
+
                 EnsureDataDir();
 
-                if (!File.Exists(TemplatesPath))
-                    throw new FileNotFoundException($"Nie znaleziono pliku: {TemplatesPath}");
+                if (File.Exists(_templatesPath))
+                {
+                    string json = File.ReadAllText(_templatesPath, Encoding.UTF8);
+                    CreateTabsFromJson(json);   // w środku wczyta też config
+                }
+                else
+                {
+                    // nawet bez pliku JSON chcemy mieć zakładkę SQL
+                    EnsureSqlTabCreated();
+                }
 
-                string json = File.ReadAllText(TemplatesPath, Encoding.UTF8);
-                CreateTabsFromJson(json);
-                LoadHistoryFromDisk(); // opcjonalnie
-                ApplyFilterToActiveTab(textBox1.Text);
-                SetStatus("JSON wczytany", "program działa");
-                FocusSearch();
+                ApplyFilterToActiveTab();
+                SetStatus("OK", "JSON + SQL gotowe");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Nie udało się przeładować danych:\n{ex.Message}", "Błąd",
+                MessageBox.Show("Błąd startu aplikacji:\n" + ex.Message, "Błąd",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        // ===== Startup =====
-        private void Form1_Load(object? sender, EventArgs e)
-        {
-            try
-            {
-                EnsureDataDir();
-
-                if (!File.Exists(TemplatesPath))
-                    throw new FileNotFoundException($"Nie znaleziono pliku: {TemplatesPath}");
-
-                string json = File.ReadAllText(TemplatesPath, Encoding.UTF8);
-
-                CreateTabsFromJson(json);
-                LoadHistoryFromDisk();
-                ApplyFilterToActiveTab(textBox1.Text);
-
-                SetStatus("JSON wczytany", "program działa");
-                FocusSearch();
-            }
-            catch (FileNotFoundException ex)
-            {
-                MessageBox.Show(ex.Message, "Błąd — brak pliku", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                SetStatus("Błąd", "Brak pliku JSON");
-                FocusSearch();
-            }
-            catch (JsonException ex)
-            {
-                MessageBox.Show($"Plik JSON ma nieprawidłowy format.\n{ex.Message}", "Błąd JSON", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                SetStatus("Błąd", "Niepoprawny JSON");
-                FocusSearch();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Wystąpił nieoczekiwany błąd.\n{ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                SetStatus("Błąd", "Program działa z błędem");
-                FocusSearch();
+                SetStatus("Błąd", "Start aplikacji niepełny");
             }
         }
 
         private void EnsureDataDir()
         {
             string dir = Path.Combine(AppContext.BaseDirectory, "Data");
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
         }
 
-        // ====== Tworzenie zakładek z templates.json ======
-        private void CreateTabsFromJson(string json)
+        // ====== Skróty klawiaturowe + ENTER ======
+        private void Form1_KeyDown(object sender, KeyEventArgs e)
         {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            if (!root.TryGetProperty("tabs", out var tabs) || tabs.ValueKind != JsonValueKind.Array)
-                throw new JsonException("Plik JSON nie zawiera prawidłowego pola 'tabs'.");
-
-            tabControl1.TabPages.Clear();
-            // wyczyść referencje historii (utworzymy na nowo)
-            _historyPage = null; _historyGrid = null; _historyTable = null;
-            _histToolbar = null; _histSearch = null; _histOnlyPinned = null; _histMinUses = null; _histSort = null;
-
-            int totalTabs = tabs.GetArrayLength();
-            int addedCount = 0;
-
-            if (totalTabs > MaxTabs)
+            // ENTER – uruchom zaznaczony wpis (tekst / aplikacja / folder) z aktywnej zakładki
+            if (!e.Control && !e.Alt && !e.Shift && e.KeyCode == Keys.Enter)
             {
-                MessageBox.Show(
-                    $"Plik JSON zawiera {totalTabs} zakładek.\n" +
-                    $"Maksymalnie można utworzyć {MaxTabs} zakładek.\n" +
-                    $"Zostaną wczytane tylko pierwsze {MaxTabs}.",
-                    "Limit zakładek",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning
-                );
-            }
-
-            foreach (var tab in tabs.EnumerateArray())
-            {
-                if (addedCount >= MaxTabs) break;
-                if (!tab.TryGetProperty("tab_name", out var nameEl) || nameEl.ValueKind != JsonValueKind.String)
-                    continue;
-
-                string name = nameEl.GetString() ?? "Bez nazwy";
-                var page = new TabPage($"{addedCount + 1}. {name}");
-
-                var grid = new DataGridView
+                TabPage page = tabControl1.SelectedTab;
+                if (page != null && _tabBindings.TryGetValue(page, out TabBinding binding) && binding.Grid != null)
                 {
-                    Dock = DockStyle.Fill,
-                    ReadOnly = true,
-                    AllowUserToAddRows = false,
-                    AllowUserToDeleteRows = false,
-                    AllowUserToOrderColumns = true,
-                    SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                    AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                    MultiSelect = false
-                };
+                    var grid = binding.Grid;
+                    int rowIndex = -1;
+                    int colIndex = 0;
 
-                var table = new DataTable { CaseSensitive = false };
-                table.Columns.Add("Shortcut", typeof(string));
-                table.Columns.Add("Description", typeof(string));
-                table.Columns.Add("Text", typeof(string));
-
-                if (tab.TryGetProperty("entries", out var entriesEl) && entriesEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var entry in entriesEl.EnumerateArray())
+                    if (grid.CurrentCell != null)
                     {
-                        string shortcut = entry.TryGetProperty("shortcut", out var sEl) && sEl.ValueKind == JsonValueKind.String ? sEl.GetString() ?? "" : "";
-                        string description = entry.TryGetProperty("description", out var dEl) && dEl.ValueKind == JsonValueKind.String ? dEl.GetString() ?? "" : "";
-                        string pasteText = entry.TryGetProperty("paste_text", out var pEl) && pEl.ValueKind == JsonValueKind.String ? pEl.GetString() ?? "" : "";
+                        rowIndex = grid.CurrentCell.RowIndex;
+                        colIndex = grid.CurrentCell.ColumnIndex;
+                    }
+                    else if (grid.SelectedRows.Count > 0)
+                    {
+                        rowIndex = grid.SelectedRows[0].Index;
+                    }
 
-                        table.Rows.Add(shortcut, description, pasteText);
+                    if (rowIndex >= 0 && rowIndex < grid.Rows.Count)
+                    {
+                        e.Handled = true;
+                        e.SuppressKeyPress = true;
+                        var args = new DataGridViewCellEventArgs(colIndex, rowIndex);
+                        Grid_CellDoubleClick(grid, args);
+                        return;
                     }
                 }
+            }
 
-                grid.DataSource = table.DefaultView;
-
-                grid.CellDoubleClick += async (s, e) =>
+            // Ctrl+0..9 – przełączanie zakładek
+            if (e.Control && !e.Alt && !e.Shift)
+            {
+                int? num = null;
+                switch (e.KeyCode)
                 {
-                    if (e.RowIndex >= 0 && e.RowIndex < grid.Rows.Count)
+                    case Keys.D0:
+                    case Keys.NumPad0: num = 0; break;
+                    case Keys.D1:
+                    case Keys.NumPad1: num = 1; break;
+                    case Keys.D2:
+                    case Keys.NumPad2: num = 2; break;
+                    case Keys.D3:
+                    case Keys.NumPad3: num = 3; break;
+                    case Keys.D4:
+                    case Keys.NumPad4: num = 4; break;
+                    case Keys.D5:
+                    case Keys.NumPad5: num = 5; break;
+                    case Keys.D6:
+                    case Keys.NumPad6: num = 6; break;
+                    case Keys.D7:
+                    case Keys.NumPad7: num = 7; break;
+                    case Keys.D8:
+                    case Keys.NumPad8: num = 8; break;
+                    case Keys.D9:
+                    case Keys.NumPad9: num = 9; break;
+                }
+
+                if (num.HasValue)
+                {
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+
+                    string prefix = num.Value.ToString() + ".";
+                    foreach (TabPage page in tabControl1.TabPages)
                     {
-                        var row = grid.Rows[e.RowIndex];
-                        var val = row.Cells["Text"].Value?.ToString() ?? "";
-                        if (!string.IsNullOrWhiteSpace(val))
+                        if (page.Text.StartsWith(prefix, StringComparison.Ordinal))
                         {
-                            TryCopyWithStatus(val); // zapis + fuzja w historii
-                            await HideAndPasteAsync();
+                            tabControl1.SelectedTab = page;
+                            ApplyFilterToActiveTab();
+                            return;
                         }
                     }
-                };
-
-                page.Controls.Add(grid);
-                tabControl1.TabPages.Add(page);
-                addedCount++;
-            }
-
-            EnsureHistoryTabCreated();
-
-            if (addedCount == 0)
-            {
-                MessageBox.Show("Nie znaleziono żadnych wpisów 'tab_name' w pliku JSON.",
-                    "Brak zakładek", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            else
-            {
-                tabControl1.SelectedIndex = 0;
+                }
             }
         }
 
-        // ====== Karta „Historia” + toolbar (BEZPIECZNA) ======
-        private void EnsureHistoryTabCreated()
+        private void TabControl1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_clearSearchOnTabChange && textBox1 != null)
+            {
+                textBox1.Text = string.Empty;
+            }
+
+            if (_focusSearchOnTabChange && textBox1 != null)
+            {
+                textBox1.Focus();
+            }
+
+            ApplyFilterToActiveTab();
+        }
+
+        // ====== Config z templates.json (sekcja "config") ======
+        private void LoadConfigFromRoot(JsonElement root)
         {
             try
             {
-                if (_historyPage != null && _historyGrid != null && _historyTable != null)
+                // nazwa profilu (opcjonalna)
+                if (root.TryGetProperty("configName", out JsonElement nameEl) &&
+                    nameEl.ValueKind == JsonValueKind.String)
                 {
-                    if (tabControl1 != null && !tabControl1.TabPages.Contains(_historyPage))
-                        tabControl1.TabPages.Add(_historyPage);
+                    _currentConfigName = nameEl.GetString();
+                }
+
+                if (!root.TryGetProperty("config", out JsonElement cfgEl) ||
+                    cfgEl.ValueKind != JsonValueKind.Object)
+                {
+                    if (!string.IsNullOrEmpty(_currentConfigName))
+                        SetStatus("Config", "Profil: " + _currentConfigName + " (brak sekcji config)");
                     return;
                 }
 
-                if (tabControl1 == null) return;
-
-                _historyPage = new TabPage("Historia");
-
-                // toolbar
-                _histToolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Top, Padding = new Padding(4) };
-                var lblFind = new ToolStripLabel("Szukaj:");
-                _histSearch = new ToolStripTextBox { AutoSize = false, Width = 220 };
-                _histSearch.TextChanged += (s, e) => ApplyHistoryView();
-
-                _histOnlyPinned = new CheckBox { Text = "Tylko przypięte", AutoSize = true };
-                _histOnlyPinned.CheckedChanged += (s, e) => ApplyHistoryView();
-                var hostPinned = new ToolStripControlHost(_histOnlyPinned) { Margin = new Padding(8, 0, 0, 0) };
-
-                var lblMin = new ToolStripLabel("Min. użyć:");
-                _histMinUses = new NumericUpDown { Minimum = 0, Maximum = 9999, Value = 0, Width = 60 };
-                _histMinUses.ValueChanged += (s, e) => ApplyHistoryView();
-                var hostMin = new ToolStripControlHost(_histMinUses) { Margin = new Padding(4, 0, 0, 0) };
-
-                var lblSort = new ToolStripLabel("Sortuj:");
-                _histSort = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
-                _histSort.Items.AddRange(new object[] { "Ostatnio użyte", "Najczęściej", "Alfabetycznie", "Data dodania" });
-                if (_histSort.Items.Count > 0) _histSort.SelectedIndex = 0;
-                _histSort.SelectedIndexChanged += (s, e) => ApplyHistoryView();
-                var hostSort = new ToolStripControlHost(_histSort) { Margin = new Padding(4, 0, 0, 0) };
-
-                _histToolbar.Items.Add(lblFind);
-                _histToolbar.Items.Add(_histSearch);
-                _histToolbar.Items.Add(new ToolStripSeparator());
-                _histToolbar.Items.Add(hostPinned);
-                _histToolbar.Items.Add(new ToolStripSeparator());
-                _histToolbar.Items.Add(lblMin);
-                _histToolbar.Items.Add(hostMin);
-                _histToolbar.Items.Add(new ToolStripSeparator());
-                _histToolbar.Items.Add(lblSort);
-                _histToolbar.Items.Add(hostSort);
-
-                // grid
-                _historyGrid = new DataGridView
+                // --- config.sql ---
+                if (cfgEl.TryGetProperty("sql", out JsonElement sqlEl) &&
+                    sqlEl.ValueKind == JsonValueKind.Object)
                 {
-                    Dock = DockStyle.Fill,
-                    ReadOnly = false,
-                    AllowUserToAddRows = false,
-                    AllowUserToDeleteRows = false,
-                    AllowUserToOrderColumns = true,
-                    SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                    AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                    MultiSelect = true
-                };
+                    string server = GetString(sqlEl, "server");
+                    bool? useWin = GetBoolNullable(sqlEl, "useWindowsAuth");
+                    string user = GetString(sqlEl, "user");
+                    string password = GetString(sqlEl, "password");
+                    string defaultDb = GetString(sqlEl, "defaultDatabase");
 
-                _historyTable = new DataTable { CaseSensitive = false };
-                _historyTable.Columns.Add("Text", typeof(string));
-                _historyTable.Columns.Add("FirstAdded", typeof(DateTime));
-                _historyTable.Columns.Add("LastUsed", typeof(DateTime));
-                _historyTable.Columns.Add("Uses", typeof(int));
-                _historyTable.Columns.Add("Pinned", typeof(bool));
+                    if (_sqlServer != null && !string.IsNullOrWhiteSpace(server))
+                        _sqlServer.Text = server;
 
-                _historyGrid.DataSource = _historyTable;
-                SafeSetFillWeight(_historyGrid, "Text", 60);
-                SafeSetFillWeight(_historyGrid, "LastUsed", 16);
-                SafeSetFillWeight(_historyGrid, "FirstAdded", 14);
-                SafeSetFillWeight(_historyGrid, "Uses", 6);
-                SafeSetFillWeight(_historyGrid, "Pinned", 4);
-
-                _historyGrid.CellDoubleClick += async (s, e) =>
-                {
-                    if (e.RowIndex >= 0 && _historyGrid != null && e.RowIndex < _historyGrid.Rows.Count)
+                    if (useWin.HasValue)
                     {
-                        var txt = _historyGrid.Rows[e.RowIndex].Cells["Text"].Value?.ToString() ?? "";
-                        if (!string.IsNullOrWhiteSpace(txt))
+                        if (useWin.Value)
                         {
-                            TryCopyWithStatus(txt);
-                            await HideAndPasteAsync();
+                            if (_sqlRbWindows != null) _sqlRbWindows.Checked = true;
                         }
-                    }
-                };
-                _historyGrid.KeyDown += (s, e) =>
-                {
-                    if (e.KeyCode == Keys.Delete)
-                    {
-                        DeleteSelectedHistoryRows();
-                        e.Handled = true;
-                    }
-                };
-                _historyGrid.CellValueChanged += (s, e) =>
-                {
-                    if (e.RowIndex >= 0) SaveHistoryToDisk();
-                };
-                _historyGrid.CellMouseDown += (s, e) =>
-                {
-                    if (e.Button == MouseButtons.Right && e.RowIndex >= 0)
-                    {
-                        _historyGrid.ClearSelection();
-                        _historyGrid.Rows[e.RowIndex].Selected = true;
-                        _historyGrid.CurrentCell = _historyGrid.Rows[e.RowIndex].Cells[Math.Max(0, e.ColumnIndex)];
-                    }
-                };
-
-                AttachHistoryContextMenu(_historyGrid);
-
-                _historyPage.Controls.Add(_historyGrid);
-                _historyPage.Controls.Add(_histToolbar);
-                tabControl1.TabPages.Add(_historyPage);
-
-                ApplyHistoryView();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this,
-                    "Nie udało się utworzyć zakładki 'Historia'.\nSzczegóły: " + ex.Message,
-                    "Błąd inicjalizacji Historii", MessageBoxButtons.OK, MessageBoxIcon.Error);
-
-                try
-                {
-                    if (_historyPage != null && tabControl1 != null && tabControl1.TabPages.Contains(_historyPage))
-                        tabControl1.TabPages.Remove(_historyPage);
-                }
-                catch { }
-
-                _historyPage = null; _historyGrid = null; _historyTable = null;
-                _histToolbar = null; _histSearch = null; _histOnlyPinned = null; _histMinUses = null; _histSort = null;
-            }
-        }
-
-        private static void SafeSetFillWeight(DataGridView grid, string colName, float weight)
-        {
-            try
-            {
-                if (grid.Columns.Contains(colName))
-                    grid.Columns[colName].FillWeight = weight;
-            }
-            catch { }
-        }
-
-        private void AttachHistoryContextMenu(DataGridView grid)
-        {
-            var menu = new ContextMenuStrip();
-            var miCopy = new ToolStripMenuItem("Kopiuj \"Text\"");
-            var miCopyPaste = new ToolStripMenuItem("Kopiuj + Wklej i ukryj");
-            var miPin = new ToolStripMenuItem("Przypnij / Odepnij");
-            var miDel = new ToolStripMenuItem("Usuń zaznaczone");
-            var miDelUnpinned = new ToolStripMenuItem("Usuń wszystkie nieprzypięte");
-            var miClearAll = new ToolStripMenuItem("Wyczyść wszystko");
-            var miExport = new ToolStripMenuItem("Eksport do JSON…");
-            var miImport = new ToolStripMenuItem("Import z JSON…");
-
-            miCopy.Click += (_, __) =>
-            {
-                var txt = GetHistorySelectedText();
-                if (!string.IsNullOrEmpty(txt)) TryCopyWithStatus(txt);
-            };
-            miCopyPaste.Click += async (_, __) =>
-            {
-                var txt = GetHistorySelectedText();
-                if (!string.IsNullOrEmpty(txt))
-                {
-                    TryCopyWithStatus(txt);
-                    await HideAndPasteAsync();
-                }
-            };
-            miPin.Click += (_, __) => TogglePinnedSelected();
-            miDel.Click += (_, __) => DeleteSelectedHistoryRows();
-            miDelUnpinned.Click += (_, __) => DeleteAllUnpinned();
-            miClearAll.Click += (_, __) => ClearAllHistory();
-            miExport.Click += (_, __) => ExportHistory();
-            miImport.Click += (_, __) => ImportHistory();
-
-            menu.Items.Add(miCopy);
-            menu.Items.Add(miCopyPaste);
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(miPin);
-            menu.Items.Add(miDel);
-            menu.Items.Add(miDelUnpinned);
-            menu.Items.Add(miClearAll);
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(miExport);
-            menu.Items.Add(miImport);
-
-            grid.ContextMenuStrip = menu;
-        }
-
-        private string GetHistorySelectedText()
-        {
-            if (_historyGrid == null) return "";
-            if (_historyGrid.SelectedRows.Count > 0)
-                return _historyGrid.SelectedRows[0].Cells["Text"].Value?.ToString() ?? "";
-            if (_historyGrid.CurrentRow != null)
-                return _historyGrid.CurrentRow.Cells["Text"].Value?.ToString() ?? "";
-            return "";
-        }
-
-        private void TogglePinnedSelected()
-        {
-            if (_historyGrid == null || _historyTable == null) return;
-            foreach (DataGridViewRow r in _historyGrid.SelectedRows)
-            {
-                bool cur = Convert.ToBoolean(r.Cells["Pinned"].Value ?? false);
-                r.Cells["Pinned"].Value = !cur;
-            }
-            SaveHistoryToDisk();
-            ApplyHistoryView();
-        }
-
-        private void DeleteSelectedHistoryRows()
-        {
-            if (_historyGrid == null || _historyTable == null) return;
-            if (_historyGrid.SelectedRows.Count == 0) return;
-
-            if (MessageBox.Show(this, "Usunąć zaznaczone wpisy historii?", "Potwierdź",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-
-            foreach (DataGridViewRow r in _historyGrid.SelectedRows)
-            {
-                if (!r.IsNewRow) _historyGrid.Rows.Remove(r);
-            }
-            SaveHistoryToDisk();
-        }
-
-        private void DeleteAllUnpinned()
-        {
-            if (_historyGrid == null || _historyTable == null) return;
-
-            if (MessageBox.Show(this, "Usunąć wszystkie NIEPRZYPINANE wpisy?", "Potwierdź",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-
-            var toDelete = new List<DataGridViewRow>();
-            foreach (DataGridViewRow r in _historyGrid.Rows)
-            {
-                bool pinned = Convert.ToBoolean(r.Cells["Pinned"].Value ?? false);
-                if (!pinned && !r.IsNewRow) toDelete.Add(r);
-            }
-            foreach (var r in toDelete) _historyGrid.Rows.Remove(r);
-
-            SaveHistoryToDisk();
-        }
-
-        private void ClearAllHistory()
-        {
-            if (_historyTable == null) return;
-
-            if (MessageBox.Show(this, "Wyczyścić CAŁĄ historię (łącznie z przypiętymi)?", "Potwierdź",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-
-            _historyTable.Rows.Clear();
-            SaveHistoryToDisk();
-        }
-
-        private void ExportHistory()
-        {
-            try
-            {
-                if (_historyTable == null) return;
-                using var sfd = new SaveFileDialog
-                {
-                    Filter = "JSON (*.json)|*.json",
-                    FileName = $"copied_history_{DateTime.Now:yyyyMMdd_HHmm}.json"
-                };
-                if (sfd.ShowDialog(this) == DialogResult.OK)
-                {
-                    var list = HistoryTableToList();
-                    var json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(sfd.FileName, json, Encoding.UTF8);
-                    SetStatus("Eksport", sfd.FileName);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Eksport nieudany: {ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void ImportHistory()
-        {
-            try
-            {
-                if (_historyTable == null) return;
-                using var ofd = new OpenFileDialog
-                {
-                    Filter = "JSON (*.json)|*.json",
-                    Multiselect = false
-                };
-                if (ofd.ShowDialog(this) == DialogResult.OK)
-                {
-                    var json = File.ReadAllText(ofd.FileName, Encoding.UTF8);
-
-                    List<HistoryEntry>? listNew = null;
-                    List<LegacyHistoryEntry>? listOld = null;
-
-                    try { listNew = JsonSerializer.Deserialize<List<HistoryEntry>>(json); }
-                    catch { }
-
-                    if (listNew == null || listNew.All(x => x == null))
-                    {
-                        try { listOld = JsonSerializer.Deserialize<List<LegacyHistoryEntry>>(json); } catch { }
-                    }
-
-                    if (listNew != null && listNew.Count > 0)
-                    {
-                        foreach (var it in listNew)
+                        else
                         {
-                            if (string.IsNullOrWhiteSpace(it.Text)) continue;
-                            AddOrBumpHistory(it.Text,
-                                it.LastUsed == default ? DateTime.Now : it.LastUsed,
-                                it.Pinned,
-                                increaseUse: Math.Max(1, it.Uses));
-                            var row = FindHistoryRowByText(it.Text);
-                            if (row != null && it.FirstAdded != default)
-                                row["FirstAdded"] = it.FirstAdded;
-                        }
-                    }
-                    else if (listOld != null && listOld.Count > 0)
-                    {
-                        foreach (var it in listOld)
-                        {
-                            if (string.IsNullOrWhiteSpace(it.Text)) continue;
-                            AddOrBumpHistory(it.Text,
-                                it.Date == default ? DateTime.Now : it.Date,
-                                it.Pinned,
-                                increaseUse: 1);
-                            var row = FindHistoryRowByText(it.Text);
-                            if (row != null) row["FirstAdded"] = it.Date;
+                            if (_sqlRbSqlAuth != null) _sqlRbSqlAuth.Checked = true;
+                            if (_sqlUser != null) _sqlUser.Text = user ?? string.Empty;
+                            if (_sqlPassword != null) _sqlPassword.Text = password ?? string.Empty;
                         }
                     }
 
-                    SaveHistoryToDisk();
-                    ApplyHistoryView();
-                    SetStatus("Importowano", "OK");
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Import nieudany: {ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        // ===== Ładowanie / Zapis historii =====
-        private void LoadHistoryFromDisk()
-        {
-            try
-            {
-                EnsureHistoryTabCreated();
-                if (_historyTable == null) return;
-
-                _historyTable.Rows.Clear();
-
-                if (!File.Exists(HistoryPath)) return;
-
-                var json = File.ReadAllText(HistoryPath, Encoding.UTF8);
-
-                List<HistoryEntry>? listNew = null;
-                List<LegacyHistoryEntry>? listOld = null;
-
-                try { listNew = JsonSerializer.Deserialize<List<HistoryEntry>>(json); }
-                catch { }
-
-                if (listNew != null && listNew.Count > 0)
-                {
-                    foreach (var it in listNew.OrderByDescending(x => x.LastUsed))
+                    // jeśli podano serwer – spróbuj automatycznie połączyć
+                    if (!string.IsNullOrWhiteSpace(server))
                     {
-                        var row = _historyTable.NewRow();
-                        row["Text"] = it.Text ?? "";
-                        row["FirstAdded"] = it.FirstAdded == default ? (it.LastUsed == default ? DateTime.Now : it.LastUsed) : it.FirstAdded;
-                        row["LastUsed"] = it.LastUsed == default ? DateTime.Now : it.LastUsed;
-                        row["Uses"] = Math.Max(1, it.Uses);
-                        row["Pinned"] = it.Pinned;
-                        _historyTable.Rows.Add(row);
-                    }
-                }
-                else
-                {
-                    try { listOld = JsonSerializer.Deserialize<List<LegacyHistoryEntry>>(json); } catch { }
-                    if (listOld != null)
-                    {
-                        foreach (var it in listOld.OrderByDescending(x => x.Date))
+                        SqlConnect_Click(this, EventArgs.Empty);
+
+                        // jeśli połączenie się udało i baza jest na liście – ustaw jako domyślną
+                        if (!string.IsNullOrWhiteSpace(defaultDb) &&
+                            _sqlDatabases != null &&
+                            _sqlDatabases.Items.Count > 0)
                         {
-                            var row = _historyTable.NewRow();
-                            row["Text"] = it.Text ?? "";
-                            row["FirstAdded"] = it.Date == default ? DateTime.Now : it.Date;
-                            row["LastUsed"] = it.Date == default ? DateTime.Now : it.Date;
-                            row["Uses"] = 1;
-                            row["Pinned"] = it.Pinned;
-                            _historyTable.Rows.Add(row);
+                            for (int i = 0; i < _sqlDatabases.Items.Count; i++)
+                            {
+                                string itemDb = _sqlDatabases.Items[i].ToString();
+                                if (string.Equals(itemDb, defaultDb, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    _sqlDatabases.SelectedIndex = i;
+                                    SetStatus("SQL", "Domyślna baza: " + defaultDb);
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
 
-                ApplyHistoryView();
+                // --- config.ui ---
+                if (cfgEl.TryGetProperty("ui", out JsonElement uiEl) &&
+                    uiEl.ValueKind == JsonValueKind.Object)
+                {
+                    bool? alwaysOnTop = GetBoolNullable(uiEl, "alwaysOnTop");
+                    bool? startMinimized = GetBoolNullable(uiEl, "startMinimized");
+                    string hotkeyText = GetString(uiEl, "hotkey"); // na razie tylko do przyszłych zmian
+
+                    if (alwaysOnTop.HasValue)
+                        this.TopMost = alwaysOnTop.Value;
+
+                    if (startMinimized.HasValue && startMinimized.Value)
+                        this.WindowState = FormWindowState.Minimized;
+
+                    // Hotkey zostawiamy jako Win+Y; w przyszłości można parsować hotkeyText
+                }
+
+                // --- config.behavior ---
+                if (cfgEl.TryGetProperty("behavior", out JsonElement behEl) &&
+                    behEl.ValueKind == JsonValueKind.Object)
+                {
+                    bool? autoPaste = GetBoolNullable(behEl, "autoPasteOnSnippetSelect");
+                    bool? rememberTab = GetBoolNullable(behEl, "rememberLastTab");
+                    bool? clearSearch = GetBoolNullable(behEl, "clearSearchOnTabChange");
+                    bool? focusSearch = GetBoolNullable(behEl, "focusSearchOnTabChange");
+
+                    if (autoPaste.HasValue)
+                        _autoPasteOnSnippetSelect = autoPaste.Value;
+                    if (rememberTab.HasValue)
+                        _rememberLastTab = rememberTab.Value;
+                    if (clearSearch.HasValue)
+                        _clearSearchOnTabChange = clearSearch.Value;
+                    if (focusSearch.HasValue)
+                        _focusSearchOnTabChange = focusSearch.Value;
+                }
+
+                if (!string.IsNullOrEmpty(_currentConfigName))
+                {
+                    SetStatus("Config", "Profil: " + _currentConfigName);
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Nie udało się wczytać historii:\n{ex.Message}", "Błąd historii",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                SetStatus("Config", "Błąd config: " + ex.Message);
             }
         }
 
-        private void SaveHistoryToDisk()
+        private static string GetString(JsonElement obj, string propertyName)
         {
-            try
+            if (obj.TryGetProperty(propertyName, out JsonElement el) &&
+                el.ValueKind == JsonValueKind.String)
             {
-                EnsureDataDir();
-                var list = HistoryTableToList();
-                var json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(HistoryPath, json, Encoding.UTF8);
-            }
-            catch
-            {
-                // cicho
-            }
-        }
-
-        private List<HistoryEntry> HistoryTableToList()
-        {
-            var list = new List<HistoryEntry>();
-            if (_historyTable == null) return list;
-
-            foreach (DataRow r in _historyTable.Rows)
-            {
-                list.Add(new HistoryEntry
-                {
-                    Text = r.Field<string>("Text") ?? "",
-                    FirstAdded = r.Field<DateTime>("FirstAdded"),
-                    LastUsed = r.Field<DateTime>("LastUsed"),
-                    Uses = Math.Max/***************************************
-***************************************/(1, r.Field<int>("Uses")) // <-- UWAGA: C# wymaga Math.Max, poprawka niżej
-                });
-            }
-            // POPRAWKA: powyżej literówka — wklej końcową wersję:
-            list = new List<HistoryEntry>();
-            foreach (DataRow r in _historyTable.Rows)
-            {
-                list.Add(new HistoryEntry
-                {
-                    Text = r.Field<string>("Text") ?? "",
-                    FirstAdded = r.Field<DateTime>("FirstAdded"),
-                    LastUsed = r.Field<DateTime>("LastUsed"),
-                    Uses = Math.Max(1, r.Field<int>("Uses")),
-                    Pinned = r.Field<bool>("Pinned")
-                });
-            }
-
-            return list.OrderByDescending(x => x.Pinned)
-                       .ThenByDescending(x => x.LastUsed)
-                       .ThenByDescending(x => x.Uses)
-                       .ToList();
-        }
-
-        // ===== API fuzji duplikatów =====
-        private void AddOrBumpHistory(string text, DateTime when, bool pinned = false, int increaseUse = 1)
-        {
-            EnsureHistoryTabCreated();
-            if (_historyTable == null) return;
-            if (string.IsNullOrWhiteSpace(text)) return;
-
-            var row = FindHistoryRowByText(text);
-            if (row != null)
-            {
-                int uses = Math.Max(1, Convert.ToInt32(row["Uses"])) + Math.Max(1, increaseUse);
-                row["Uses"] = uses;
-                row["LastUsed"] = when;
-                if (pinned) row["Pinned"] = true;
-
-                var cloned = _historyTable.NewRow();
-                cloned.ItemArray = row.ItemArray.Clone() as object[] ?? row.ItemArray;
-                _historyTable.Rows.Remove(row);
-                _historyTable.Rows.InsertAt(cloned, 0);
-            }
-            else
-            {
-                var nr = _historyTable.NewRow();
-                nr["Text"] = text;
-                nr["FirstAdded"] = when;
-                nr["LastUsed"] = when;
-                nr["Uses"] = Math.Max(1, increaseUse);
-                nr["Pinned"] = pinned;
-                _historyTable.Rows.InsertAt(nr, 0);
-            }
-
-            ApplyHistoryView();
-        }
-
-        private DataRow? FindHistoryRowByText(string text)
-        {
-            if (_historyTable == null) return null;
-            foreach (DataRow r in _historyTable.Rows)
-            {
-                if (string.Equals(r.Field<string>("Text") ?? "", text, StringComparison.Ordinal))
-                    return r;
+                return el.GetString();
             }
             return null;
         }
 
-        // ====== Filtry/sortowanie dla Historii ======
-        private void ApplyHistoryView()
+        private static bool? GetBoolNullable(JsonElement obj, string propertyName)
         {
-            if (_historyTable == null) return;
-
-            var view = _historyTable.DefaultView;
-
-            string qToolbar = _histSearch?.Text?.Trim() ?? "";
-            string qGlobal = textBox1?.Text?.Trim() ?? "";
-
-            var parts = new List<string>();
-            if (!string.IsNullOrWhiteSpace(qToolbar))
-                parts.Add($"[Text] LIKE '%{EscapeLikeValue(qToolbar)}%'");
-            if (!string.IsNullOrWhiteSpace(qGlobal))
-                parts.Add($"[Text] LIKE '%{EscapeLikeValue(qGlobal)}%'");
-
-            if (_histOnlyPinned != null && _histOnlyPinned.Checked)
-                parts.Add("[Pinned] = TRUE");
-
-            if (_histMinUses != null && _histMinUses.Value > 0)
-                parts.Add($"[Uses] >= {_histMinUses.Value}");
-
-            view.RowFilter = parts.Count == 0 ? "" : string.Join(" AND ", parts);
-
-            string sort = "Pinned DESC, LastUsed DESC, Uses DESC";
-            if (_histSort != null)
+            if (obj.TryGetProperty(propertyName, out JsonElement el) &&
+                (el.ValueKind == JsonValueKind.True || el.ValueKind == JsonValueKind.False))
             {
-                switch (_histSort.SelectedIndex)
+                return el.GetBoolean();
+            }
+            return null;
+        }
+
+        // ====== Tworzenie zakładek z JSON (tabs) + config ======
+        private void CreateTabsFromJson(string json)
+        {
+            // najpierw upewniamy się, że zakładka SQL istnieje (potrzebujemy kontrolek do wczytania config.sql)
+            EnsureSqlTabCreated();
+
+            using (JsonDocument doc = JsonDocument.Parse(json))
+            {
+                JsonElement root = doc.RootElement;
+
+                // wczytaj config (sql/ui/behavior)
+                LoadConfigFromRoot(root);
+
+                if (!root.TryGetProperty("tabs", out JsonElement tabsElement) ||
+                    tabsElement.ValueKind != JsonValueKind.Array)
                 {
-                    case 0: sort = "Pinned DESC, LastUsed DESC, Uses DESC"; break; // Ostatnio użyte
-                    case 1: sort = "Pinned DESC, Uses DESC, LastUsed DESC"; break; // Najczęściej
-                    case 2: sort = "Pinned DESC, Text ASC"; break;                 // Alfabetycznie
-                    case 3: sort = "Pinned DESC, FirstAdded DESC"; break;          // Data dodania
-                }
-            }
-            view.Sort = sort;
-        }
-
-        // ===== Filtrowanie w aktywnej zakładce (inne niż Historia) =====
-        private void textBox1_TextChanged(object? sender, EventArgs e)
-        {
-            ApplyFilterToActiveTab(textBox1.Text);
-        }
-
-        private void ApplyFilterToActiveTab(string query)
-        {
-            if (tabControl1.SelectedTab == _historyPage)
-            {
-                ApplyHistoryView();
-                return;
-            }
-
-            var grid = GetActiveGrid();
-            if (grid == null) return;
-
-            DataView? view = grid.DataSource as DataView;
-            if (view == null)
-            {
-                if (grid.DataSource is DataTable t)
-                    view = t.DefaultView;
-                else
-                    return;
-            }
-
-            if (string.IsNullOrWhiteSpace(query))
-            {
-                view.RowFilter = string.Empty;
-                return;
-            }
-
-            string escaped = EscapeLikeValue(query.Trim());
-            view.RowFilter =
-                $"[Shortcut] LIKE '%{escaped}%' OR " +
-                $"[Description] LIKE '%{escaped}%' OR " +
-                $"[Text] LIKE '%{escaped}%'";
-        }
-
-        private static string EscapeLikeValue(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return value;
-            value = value.Replace("'", "''");
-            value = value.Replace("[", "[[]").Replace("%", "[%]").Replace("_", "[_]");
-            return value;
-        }
-
-        private DataGridView? GetActiveGrid()
-        {
-            if (tabControl1.TabPages.Count == 0) return null;
-            var page = tabControl1.SelectedTab;
-            if (page == null) return null;
-            if (page == _historyPage) return _historyGrid;
-            return page.Controls.OfType<DataGridView>().FirstOrDefault();
-        }
-
-        // ===== Enter w polu wyszukiwarki =====
-        private async void textBox1_KeyDown(object? sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.Enter)
-            {
-                e.Handled = true;
-                e.SuppressKeyPress = true;
-
-                if (tabControl1.SelectedTab == _historyPage && _historyGrid != null)
-                {
-                    foreach (DataGridViewRow row in _historyGrid.Rows)
-                    {
-                        if (row.Visible)
-                        {
-                            var val = row.Cells["Text"].Value?.ToString() ?? "";
-                            if (!string.IsNullOrWhiteSpace(val))
-                            {
-                                TryCopyWithStatus(val);
-                                await HideAndPasteAsync();
-                            }
-                            break;
-                        }
-                    }
-                    return;
+                    throw new JsonException("Plik JSON nie zawiera prawidłowego pola 'tabs'.");
                 }
 
-                var grid = GetActiveGrid();
-                if (grid == null || grid.Rows.Count == 0)
+                // czyścimy wszystkie zakładki, ale NIE tracimy referencji do _sqlPage
+                tabControl1.TabPages.Clear();
+                _tabBindings.Clear();
+
+                int totalTabs = tabsElement.GetArrayLength();
+                int added = 0;
+
+                if (totalTabs > MaxTabs)
                 {
-                    FocusSearch();
-                    return;
+                    MessageBox.Show(
+                        "Plik JSON zawiera " + totalTabs + " zakładek.\n" +
+                        "Maksymalnie można utworzyć " + MaxTabs + " zakładek.\n" +
+                        "Zostaną wczytane tylko pierwsze " + MaxTabs + ".",
+                        "Limit zakładek",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
                 }
 
-                foreach (DataGridViewRow row in grid.Rows)
+                foreach (JsonElement tabEl in tabsElement.EnumerateArray())
                 {
-                    if (row.Visible)
-                    {
-                        var val = row.Cells["Text"].Value?.ToString() ?? "";
-                        if (!string.IsNullOrWhiteSpace(val))
-                        {
-                            TryCopyWithStatus(val);
-                            await HideAndPasteAsync();
-                        }
+                    if (added >= MaxTabs)
                         break;
+
+                    if (!tabEl.TryGetProperty("tab_name", out JsonElement nameEl) ||
+                        nameEl.ValueKind != JsonValueKind.String)
+                    {
+                        continue;
+                    }
+
+                    string tabName = nameEl.GetString() ?? "Bez nazwy";
+
+                    TabPage page = new TabPage((added + 1).ToString() + ". " + tabName);
+
+                    DataGridView grid = new DataGridView();
+                    grid.Dock = DockStyle.Fill;
+                    grid.ReadOnly = true;
+                    grid.AllowUserToAddRows = false;
+                    grid.AllowUserToDeleteRows = false;
+                    grid.AllowUserToOrderColumns = true;
+                    grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+                    grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+                    grid.MultiSelect = false;
+
+                    DataTable table = new DataTable();
+                    table.CaseSensitive = false;
+
+                    // kolumny podstawowe
+                    table.Columns.Add("Shortcut", typeof(string));
+                    table.Columns.Add("Description", typeof(string));
+                    table.Columns.Add("Text", typeof(string));
+
+                    // dodatkowe kolumny dla typu "app" oraz "folder"
+                    table.Columns.Add("Type", typeof(string));        // "text" / "app" / "folder"
+                    table.Columns.Add("AppName", typeof(string));
+                    table.Columns.Add("AppPath", typeof(string));
+                    table.Columns.Add("AppArgs", typeof(string));
+                    table.Columns.Add("WorkingDir", typeof(string));
+                    table.Columns.Add("RunAsAdmin", typeof(bool));
+                    table.Columns.Add("FolderPath", typeof(string));
+
+                    if (tabEl.TryGetProperty("entries", out JsonElement entriesEl) &&
+                        entriesEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement entryEl in entriesEl.EnumerateArray())
+                        {
+                            string shortcut = "";
+                            string description = "";
+                            string text = "";
+
+                            string type = "text";
+                            string appName = "";
+                            string appPath = "";
+                            string appArgs = "";
+                            string workingDir = "";
+                            bool runAsAdmin = false;
+                            string folderPath = "";
+
+                            if (entryEl.TryGetProperty("shortcut", out JsonElement sEl) &&
+                                sEl.ValueKind == JsonValueKind.String)
+                            {
+                                shortcut = sEl.GetString() ?? "";
+                            }
+
+                            if (entryEl.TryGetProperty("description", out JsonElement dEl) &&
+                                dEl.ValueKind == JsonValueKind.String)
+                            {
+                                description = dEl.GetString() ?? "";
+                            }
+
+                            if (entryEl.TryGetProperty("paste_text", out JsonElement pEl) &&
+                                pEl.ValueKind == JsonValueKind.String)
+                            {
+                                text = pEl.GetString() ?? "";
+                            }
+
+                            if (entryEl.TryGetProperty("type", out JsonElement tEl) &&
+                                tEl.ValueKind == JsonValueKind.String)
+                            {
+                                type = (tEl.GetString() ?? "text").ToLowerInvariant();
+                            }
+
+                            if (type == "app")
+                            {
+                                if (entryEl.TryGetProperty("app_name", out JsonElement anEl) &&
+                                    anEl.ValueKind == JsonValueKind.String)
+                                {
+                                    appName = anEl.GetString() ?? "";
+                                }
+
+                                if (entryEl.TryGetProperty("app_path", out JsonElement apEl) &&
+                                    apEl.ValueKind == JsonValueKind.String)
+                                {
+                                    appPath = apEl.GetString() ?? "";
+                                }
+
+                                if (entryEl.TryGetProperty("app_args", out JsonElement aaEl) &&
+                                    aaEl.ValueKind == JsonValueKind.String)
+                                {
+                                    appArgs = aaEl.GetString() ?? "";
+                                }
+
+                                if (entryEl.TryGetProperty("working_dir", out JsonElement wdEl) &&
+                                    wdEl.ValueKind == JsonValueKind.String)
+                                {
+                                    workingDir = wdEl.GetString() ?? "";
+                                }
+
+                                if (entryEl.TryGetProperty("run_as_admin", out JsonElement raEl) &&
+                                    (raEl.ValueKind == JsonValueKind.True || raEl.ValueKind == JsonValueKind.False))
+                                {
+                                    runAsAdmin = raEl.GetBoolean();
+                                }
+
+                                if (string.IsNullOrWhiteSpace(text))
+                                {
+                                    text = appPath;
+                                }
+                            }
+                            else if (type == "folder")
+                            {
+                                if (entryEl.TryGetProperty("folder_path", out JsonElement fpEl) &&
+                                    fpEl.ValueKind == JsonValueKind.String)
+                                {
+                                    folderPath = fpEl.GetString() ?? "";
+                                }
+
+                                if (string.IsNullOrWhiteSpace(text))
+                                {
+                                    text = folderPath;
+                                }
+                            }
+
+                            table.Rows.Add(shortcut, description, text, type, appName, appPath, appArgs, workingDir, runAsAdmin, folderPath);
+                        }
+                    }
+
+                    grid.DataSource = table.DefaultView;
+                    grid.CellDoubleClick += Grid_CellDoubleClick;
+
+                    page.Controls.Add(grid);
+                    tabControl1.TabPages.Add(page);
+                    _tabBindings[page] = new TabBinding { Table = table, Grid = grid };
+
+                    added++;
+                }
+
+                // na koniec – wstawiamy zakładkę SQL jako pierwszą
+                if (_sqlPage != null && !tabControl1.TabPages.Contains(_sqlPage))
+                {
+                    tabControl1.TabPages.Insert(0, _sqlPage);
+                }
+            }
+        }
+
+        // ====== Double-click / ENTER: text vs app vs folder ======
+        private void Grid_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            var grid = sender as DataGridView;
+            if (grid == null || e.RowIndex < 0 || e.RowIndex >= grid.Rows.Count)
+                return;
+
+            var rowView = grid.Rows[e.RowIndex].DataBoundItem as DataRowView;
+            if (rowView == null)
+                return;
+
+            string type;
+            try
+            {
+                type = (rowView["Type"] as string ?? "text").Trim().ToLowerInvariant();
+            }
+            catch
+            {
+                type = "text";
+            }
+
+            // ---- folder ----
+            if (type == "folder")
+            {
+                string folderPath = "";
+                try { folderPath = rowView["FolderPath"] as string ?? ""; } catch { folderPath = ""; }
+
+                if (string.IsNullOrWhiteSpace(folderPath))
+                {
+                    MessageBox.Show("Brak ścieżki folderu (FolderPath) dla tego wpisu.", "Błąd",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (!Directory.Exists(folderPath))
+                {
+                    var res = MessageBox.Show(
+                        "Folder nie istnieje:\n" + folderPath + "\n\nCzy mimo to spróbować go otworzyć?",
+                        "Folder",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (res != DialogResult.Yes)
+                        return;
+                }
+
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = folderPath,
+                        UseShellExecute = true
+                    };
+
+                    Process.Start(psi);
+                    SetStatus("Folder", "Otworzono: " + folderPath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Nie udało się otworzyć folderu:\n" + ex.Message, "Błąd",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    SetStatus("Folder", "Błąd otwierania folderu");
+                }
+
+                return;
+            }
+
+            // ---- aplikacja ----
+            if (type == "app")
+            {
+                string appPath = "";
+                string appArgs = "";
+                string workingDir = "";
+                bool runAsAdmin = false;
+
+                try { appPath = rowView["AppPath"] as string ?? ""; } catch { }
+                try { appArgs = rowView["AppArgs"] as string ?? ""; } catch { }
+                try { workingDir = rowView["WorkingDir"] as string ?? ""; } catch { }
+
+                try
+                {
+                    if (!Convert.IsDBNull(rowView["RunAsAdmin"]))
+                        runAsAdmin = Convert.ToBoolean(rowView["RunAsAdmin"]);
+                }
+                catch
+                {
+                    runAsAdmin = false;
+                }
+
+                if (string.IsNullOrWhiteSpace(appPath))
+                {
+                    MessageBox.Show("Brak ścieżki aplikacji (AppPath) dla tego wpisu.", "Błąd",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = appPath,
+                        Arguments = appArgs,
+                        UseShellExecute = true
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(workingDir))
+                        psi.WorkingDirectory = workingDir;
+
+                    if (runAsAdmin)
+                        psi.Verb = "runas";
+
+                    Process.Start(psi);
+                    SetStatus("App", "Uruchomiono: " + appPath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Nie udało się uruchomić aplikacji:\n" + ex.Message, "Błąd",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    SetStatus("App", "Błąd uruchamiania aplikacji");
+                }
+
+                return;
+            }
+
+            // ---- type = "text" – kopiuj i (jeśli się da) wklej do poprzedniego okna ----
+            string text = "";
+            try
+            {
+                text = rowView["Text"] as string ?? "";
+            }
+            catch
+            {
+                text = "";
+            }
+
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
+            bool copied = false;
+            try
+            {
+                Clipboard.SetText(text);
+                copied = true;
+            }
+            catch
+            {
+                MessageBox.Show("Nie udało się skopiować do schowka.", "Błąd schowka",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+            bool pasted = false;
+
+            try
+            {
+                if (_autoPasteOnSnippetSelect &&
+                    _lastActiveWindow != IntPtr.Zero && _lastActiveWindow != this.Handle)
+                {
+                    SetForegroundWindow(_lastActiveWindow);
+                    Thread.Sleep(50);
+                    SendKeys.SendWait("^v");
+                    pasted = true;
+                }
+            }
+            catch
+            {
+            }
+
+            if (pasted)
+            {
+                SetStatus("Wklej", "Tekst wklejony do poprzedniego okna");
+            }
+            else if (copied)
+            {
+                SetStatus("Kopiuj", "Tekst skopiowany do schowka");
+            }
+        }
+
+        private void ApplyFilterToActiveTab()
+        {
+            TabPage page = tabControl1.SelectedTab;
+            if (page == null)
+                return;
+
+            if (!_tabBindings.TryGetValue(page, out TabBinding binding))
+                return;
+
+            string filterText = textBox1.Text == null ? "" : textBox1.Text.Trim();
+            DataView view = binding.Table.DefaultView;
+
+            if (string.IsNullOrWhiteSpace(filterText))
+            {
+                view.RowFilter = "";
+                return;
+            }
+
+            string esc = filterText.Replace("'", "''");
+            view.RowFilter =
+                "Shortcut LIKE '%" + esc + "%' OR " +
+                "Description LIKE '%" + esc + "%' OR " +
+                "Text LIKE '%" + esc + "%' OR " +
+                "FolderPath LIKE '%" + esc + "%'";
+        }
+
+        private void SetStatus(string left, string right)
+        {
+            toolStripStatusLabel1.Text = left;
+            toolStripStatusLabel2.Text = right;
+        }
+
+        private void ZarzadzajToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                EnsureDataDir();
+
+                using (var dlg = new ManageJsonEditorForm(_templatesPath))
+                {
+                    dlg.ShowDialog(this);
+
+                    // przeładuj tylko, jeśli JSON został zapisany
+                    if (dlg.JsonChanged && File.Exists(_templatesPath))
+                    {
+                        string json = File.ReadAllText(_templatesPath, Encoding.UTF8);
+                        CreateTabsFromJson(json);
+                        ApplyFilterToActiveTab();
+                        SetStatus("JSON", "Zaktualizowano z pliku");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Nie udało się odświeżyć zakładek z JSON:\n" + ex.Message, "Błąd",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // ============================
+        //  ZAKŁADKA "0. SQL Script"
+        // ============================
+        private void EnsureSqlTabCreated()
+        {
+            if (_sqlPage == null)
+            {
+                _sqlPage = new TabPage("0. SQL Script");
+                tabControl1.TabPages.Insert(0, _sqlPage);
+
+                var panel = new System.Windows.Forms.Panel();
+                panel.Dock = DockStyle.Fill;
+                _sqlPage.Controls.Add(panel);
+
+                var gbConn = new System.Windows.Forms.GroupBox();
+                gbConn.Text = "Połączenie z SQL Server";
+                gbConn.Left = 8;
+                gbConn.Top = 8;
+                gbConn.Width = 520;
+                gbConn.Height = 110;
+                gbConn.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                panel.Controls.Add(gbConn);
+
+                var lblServer = new System.Windows.Forms.Label();
+                lblServer.Text = "Serwer:";
+                lblServer.Left = 10;
+                lblServer.Top = 25;
+                lblServer.AutoSize = true;
+
+                _sqlServer = new System.Windows.Forms.TextBox();
+                _sqlServer.Left = 70;
+                _sqlServer.Top = 22;
+                _sqlServer.Width = 340;
+                _sqlServer.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+                _sqlRbWindows = new System.Windows.Forms.RadioButton();
+                _sqlRbWindows.Text = "Windows";
+                _sqlRbWindows.Left = 10;
+                _sqlRbWindows.Top = 55;
+                _sqlRbWindows.AutoSize = true;
+                _sqlRbWindows.Checked = true;
+
+                _sqlRbSqlAuth = new System.Windows.Forms.RadioButton();
+                _sqlRbSqlAuth.Text = "SQL Server";
+                _sqlRbSqlAuth.Left = 100;
+                _sqlRbSqlAuth.Top = 55;
+                _sqlRbSqlAuth.AutoSize = true;
+
+                var lblUser = new System.Windows.Forms.Label();
+                lblUser.Text = "Login:";
+                lblUser.Left = 200;
+                lblUser.Top = 55;
+                lblUser.AutoSize = true;
+
+                _sqlUser = new System.Windows.Forms.TextBox();
+                _sqlUser.Left = 200;
+                _sqlUser.Top = 72;
+                _sqlUser.Width = 120;
+                _sqlUser.Enabled = false;
+
+                var lblPass = new System.Windows.Forms.Label();
+                lblPass.Text = "Hasło:";
+                lblPass.Left = 330;
+                lblPass.Top = 55;
+                lblPass.AutoSize = true;
+
+                _sqlPassword = new System.Windows.Forms.TextBox();
+                _sqlPassword.Left = 330;
+                _sqlPassword.Top = 72;
+                _sqlPassword.Width = 120;
+                _sqlPassword.Enabled = false;
+                _sqlPassword.UseSystemPasswordChar = true;
+
+                _sqlRbWindows.CheckedChanged += (s, e) => UpdateSqlAuthControls();
+                _sqlRbSqlAuth.CheckedChanged += (s, e) => UpdateSqlAuthControls();
+
+                gbConn.Controls.Add(lblServer);
+                gbConn.Controls.Add(_sqlServer);
+                gbConn.Controls.Add(_sqlRbWindows);
+                gbConn.Controls.Add(_sqlRbSqlAuth);
+                gbConn.Controls.Add(lblUser);
+                gbConn.Controls.Add(_sqlUser);
+                gbConn.Controls.Add(lblPass);
+                gbConn.Controls.Add(_sqlPassword);
+
+                _sqlBtnConnect = new System.Windows.Forms.Button();
+                _sqlBtnConnect.Text = "Połącz";
+                _sqlBtnConnect.Left = gbConn.Right + 8;
+                _sqlBtnConnect.Top = gbConn.Top + 20;
+                _sqlBtnConnect.Width = 90;
+                _sqlBtnConnect.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+                _sqlBtnConnect.Click += SqlConnect_Click;
+                panel.Controls.Add(_sqlBtnConnect);
+
+                var lblDb = new System.Windows.Forms.Label();
+                lblDb.Text = "Baza:";
+                lblDb.Left = 10;
+                lblDb.Top = gbConn.Bottom + 12;
+                lblDb.AutoSize = true;
+
+                _sqlDatabases = new System.Windows.Forms.ComboBox();
+                _sqlDatabases.Left = 70;
+                _sqlDatabases.Top = gbConn.Bottom + 8;
+                _sqlDatabases.Width = 220;
+                _sqlDatabases.DropDownStyle = ComboBoxStyle.DropDownList;
+                _sqlDatabases.SelectedIndexChanged += SqlDatabases_SelectedIndexChanged;
+
+                var lblTable = new System.Windows.Forms.Label();
+                lblTable.Text = "Tabela:";
+                lblTable.Left = 300;
+                lblTable.Top = gbConn.Bottom + 12;
+                lblTable.AutoSize = true;
+
+                _sqlTables = new System.Windows.Forms.ComboBox();
+                _sqlTables.Left = 360;
+                _sqlTables.Top = gbConn.Bottom + 8;
+                _sqlTables.Width = 220;
+                _sqlTables.DropDownStyle = ComboBoxStyle.DropDownList;
+
+                panel.Controls.Add(lblDb);
+                panel.Controls.Add(_sqlDatabases);
+                panel.Controls.Add(lblTable);
+                panel.Controls.Add(_sqlTables);
+
+                var lblWhere = new System.Windows.Forms.Label();
+                lblWhere.Text = "WHERE (opcjonalne):";
+                lblWhere.Left = 10;
+                lblWhere.Top = _sqlDatabases.Bottom + 12;
+                lblWhere.AutoSize = true;
+
+                _sqlWhere = new System.Windows.Forms.TextBox();
+                _sqlWhere.Left = 150;
+                _sqlWhere.Top = _sqlDatabases.Bottom + 8;
+                _sqlWhere.Width = 430;
+                _sqlWhere.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+                _sqlIncludeData = new System.Windows.Forms.CheckBox();
+                _sqlIncludeData.Text = "Dołącz dane (INSERT)";
+                _sqlIncludeData.Left = 10;
+                _sqlIncludeData.Top = _sqlWhere.Bottom + 8;
+                _sqlIncludeData.AutoSize = true;
+                _sqlIncludeData.Checked = true;
+
+                // NOWE: Object ID (tempdb) + przycisk
+                var lblTempObj = new System.Windows.Forms.Label();
+                lblTempObj.Text = "Object ID (tempdb):";
+                lblTempObj.Left = 200;
+                lblTempObj.Top = _sqlWhere.Bottom + 8;
+                lblTempObj.AutoSize = true;
+
+                _sqlTempObjectId = new System.Windows.Forms.TextBox();
+                _sqlTempObjectId.Left = 320;
+                _sqlTempObjectId.Top = _sqlWhere.Bottom + 6;
+                _sqlTempObjectId.Width = 120;
+
+                _sqlBtnScriptTemp = new System.Windows.Forms.Button();
+                _sqlBtnScriptTemp.Text = "Script tempdb";
+                _sqlBtnScriptTemp.Left = 450;
+                _sqlBtnScriptTemp.Top = _sqlWhere.Bottom + 4;
+                _sqlBtnScriptTemp.Width = 120;
+                _sqlBtnScriptTemp.Click += SqlScriptTempObject_Click;
+
+                panel.Controls.Add(lblWhere);
+                panel.Controls.Add(_sqlWhere);
+                panel.Controls.Add(_sqlIncludeData);
+                panel.Controls.Add(lblTempObj);
+                panel.Controls.Add(_sqlTempObjectId);
+                panel.Controls.Add(_sqlBtnScriptTemp);
+
+                // Przesuwamy przyciski GENERUJ/KOPIUJ/ZAPISZ nieco niżej
+                int buttonsTop = _sqlWhere.Bottom + 36;
+
+                _sqlBtnGenerate = new System.Windows.Forms.Button();
+                _sqlBtnGenerate.Text = "Generuj skrypt";
+                _sqlBtnGenerate.Left = 200;
+                _sqlBtnGenerate.Top = buttonsTop;
+                _sqlBtnGenerate.Width = 120;
+                _sqlBtnGenerate.Click += SqlGenerate_Click;
+
+                _sqlBtnCopy = new System.Windows.Forms.Button();
+                _sqlBtnCopy.Text = "Kopiuj";
+                _sqlBtnCopy.Left = 330;
+                _sqlBtnCopy.Top = buttonsTop;
+                _sqlBtnCopy.Width = 80;
+                _sqlBtnCopy.Click += (s, e) =>
+                {
+                    if (_sqlScript != null && !string.IsNullOrEmpty(_sqlScript.Text))
+                    {
+                        Clipboard.SetText(_sqlScript.Text);
+                        SetStatus("SQL", "Skrypt skopiowany do schowka");
+                    }
+                };
+
+                _sqlBtnSave = new System.Windows.Forms.Button();
+                _sqlBtnSave.Text = "Zapisz do pliku";
+                _sqlBtnSave.Left = 420;
+                _sqlBtnSave.Top = buttonsTop;
+                _sqlBtnSave.Width = 120;
+                _sqlBtnSave.Click += SqlSaveToFile_Click;
+
+                panel.Controls.Add(_sqlBtnGenerate);
+                panel.Controls.Add(_sqlBtnCopy);
+                panel.Controls.Add(_sqlBtnSave);
+
+                _sqlScript = new System.Windows.Forms.TextBox();
+                _sqlScript.Multiline = true;
+                _sqlScript.ScrollBars = ScrollBars.Both;
+                _sqlScript.AcceptsReturn = true;
+                _sqlScript.AcceptsTab = true;
+                _sqlScript.Left = 8;
+                _sqlScript.Top = _sqlBtnSave.Bottom + 8;
+                _sqlScript.Width = panel.ClientSize.Width - 16;
+                _sqlScript.Height = panel.ClientSize.Height - (_sqlBtnSave.Bottom + 16);
+                _sqlScript.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+                _sqlScript.Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericMonospace, 9f);
+                panel.Controls.Add(_sqlScript);
+            }
+            else
+            {
+                // jeśli już istnieje – upewniamy się, że jest na pozycji 0
+                if (!tabControl1.TabPages.Contains(_sqlPage))
+                {
+                    tabControl1.TabPages.Insert(0, _sqlPage);
+                }
+                else
+                {
+                    int idx = tabControl1.TabPages.IndexOf(_sqlPage);
+                    if (idx != 0)
+                    {
+                        tabControl1.TabPages.RemoveAt(idx);
+                        tabControl1.TabPages.Insert(0, _sqlPage);
                     }
                 }
             }
         }
 
-        // ===== po zmianie zakładki: filtr + fokus do textBox1 =====
-        private void TabControl1_SelectedIndexChanged(object? sender, EventArgs e)
+        private void UpdateSqlAuthControls()
         {
-            ApplyFilterToActiveTab(textBox1.Text);
-            BeginInvoke(new Action(() => FocusSearch(false)));
+            if (_sqlRbSqlAuth == null || _sqlUser == null || _sqlPassword == null)
+                return;
+
+            bool sqlAuth = _sqlRbSqlAuth.Checked;
+            _sqlUser.Enabled = sqlAuth;
+            _sqlPassword.Enabled = sqlAuth;
         }
 
-        // ===== ukryj okno i wklej Ctrl+V do aktywnej aplikacji =====
-        private async Task HideAndPasteAsync()
+        private string BuildSqlBaseConnectionString()
         {
-            try
+            if (_sqlServer == null)
+                throw new InvalidOperationException("Kontrolki SQL nie zostały zainicjalizowane.");
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("Server=").Append(_sqlServer.Text.Trim()).Append(";");
+
+            if (_sqlRbWindows != null && _sqlRbWindows.Checked)
             {
-                HideToTray();
-                await Task.Delay(150);
-                SendKeys.SendWait("^v");
+                sb.Append("Integrated Security=True;");
             }
-            catch
+            else
             {
-                // nic – tekst już w schowku
+                if (_sqlUser == null || _sqlPassword == null)
+                    throw new InvalidOperationException("Brak kontrolek login/hasło.");
+
+                sb.Append("User Id=").Append(_sqlUser.Text.Trim()).Append(";");
+                sb.Append("Password=").Append(_sqlPassword.Text).Append(";");
             }
+
+            sb.Append("Encrypt=False;");
+            sb.Append("TrustServerCertificate=True;");
+
+            return sb.ToString();
         }
 
-        // ===== Kopiowanie + zapis do Historii (fuzja) =====
-        private void TryCopyWithStatus(string fullText)
-        {
-            try
-            {
-                _suppressNextClipboardCapture = true; // nie dubluj z WM_CLIPBOARDUPDATE
-                Clipboard.SetText(fullText);
-
-                SetStatus("Skopiowano", fullText);
-
-                AddOrBumpHistory(fullText, DateTime.Now, pinned: false, increaseUse: 1);
-                SaveHistoryToDisk();
-            }
-            catch
-            {
-                MessageBox.Show("Nie udało się skopiować do schowka.", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void SetStatus(string left, string rightFull)
+        private void SqlConnect_Click(object sender, EventArgs e)
         {
             try
             {
-                toolStripStatusLabel1.Text = left ?? string.Empty;
+                if (_sqlServer == null)
+                    return;
 
-                string shown = rightFull ?? string.Empty;
-                if (shown.Length > StatusRightMaxLen)
-                    shown = shown.Substring(0, StatusRightMaxLen) + "…";
+                if (string.IsNullOrWhiteSpace(_sqlServer.Text))
+                {
+                    MessageBox.Show(this, "Podaj nazwę serwera SQL.", "Błąd",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
 
-                toolStripStatusLabel2.Text = shown;
-                toolStripStatusLabel2.ToolTipText = rightFull ?? string.Empty;
+                if (_sqlRbSqlAuth != null && _sqlRbSqlAuth.Checked)
+                {
+                    if (_sqlUser == null || _sqlPassword == null ||
+                        string.IsNullOrWhiteSpace(_sqlUser.Text) ||
+                        string.IsNullOrWhiteSpace(_sqlPassword.Text))
+                    {
+                        MessageBox.Show(this, "Podaj login i hasło dla uwierzytelniania SQL Server.", "Błąd",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
+
+                _sqlBaseConnectionString = BuildSqlBaseConnectionString();
+                string connStr = _sqlBaseConnectionString + "Database=master;";
+
+                using (SqlConnection conn = new SqlConnection(connStr))
+                {
+                    conn.Open();
+
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        MessageBox.Show(this, "Nie udało się połączyć z serwerem SQL.", "Błąd",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        SetStatus("SQL", "Brak połączenia z serwerem");
+                        return;
+                    }
+
+                    List<string> dbs = GetDatabasesList(conn);
+
+                    if (_sqlDatabases != null)
+                    {
+                        _sqlDatabases.Items.Clear();
+                        foreach (string db in dbs)
+                            _sqlDatabases.Items.Add(db);
+                        if (_sqlDatabases.Items.Count > 0)
+                            _sqlDatabases.SelectedIndex = 0;
+                    }
+
+                    SetStatus("SQL", "Połączono. Baz: " + dbs.Count + ".");
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Błąd połączenia: " + ex.Message, "Błąd",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                SetStatus("SQL", "Błąd połączenia z serwerem");
+            }
         }
-    }
 
-    // ===== MODELE JSON (poza Form1, aby uniknąć kolizji w partial) =====
+        private List<string> GetDatabasesList(SqlConnection conn)
+        {
+            List<string> list = new List<string>();
 
-    /// <summary>
-    /// Nowy format historii.
-    /// </summary>
-    public sealed class HistoryEntry
-    {
-        [JsonPropertyName("text")] public string Text { get; set; } = "";
-        [JsonPropertyName("firstAdded")] public DateTime FirstAdded { get; set; }
-        [JsonPropertyName("lastUsed")] public DateTime LastUsed { get; set; }
-        [JsonPropertyName("uses")] public int Uses { get; set; }
-        [JsonPropertyName("pinned")] public bool Pinned { get; set; }
-    }
+            using (SqlCommand cmd = new SqlCommand(@"
+                SELECT name 
+                FROM sys.databases 
+                WHERE database_id > 4
+                ORDER BY name;", conn))
+            using (SqlDataReader r = cmd.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    list.Add(r.GetString(0));
+                }
+            }
 
-    /// <summary>
-    /// Stary format (wsteczna zgodność).
-    /// </summary>
-    public sealed class LegacyHistoryEntry
-    {
-        [JsonPropertyName("text")] public string Text { get; set; } = "";
-        [JsonPropertyName("date")] public DateTime Date { get; set; }
-        [JsonPropertyName("pinned")] public bool Pinned { get; set; }
+            return list;
+        }
+
+        private void SqlDatabases_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_sqlDatabases == null || _sqlDatabases.SelectedItem == null || string.IsNullOrEmpty(_sqlBaseConnectionString))
+                    return;
+
+                string dbName = _sqlDatabases.SelectedItem.ToString();
+                string connStr = _sqlBaseConnectionString + "Database=" + dbName + ";";
+
+                using (SqlConnection conn = new SqlConnection(connStr))
+                {
+                    conn.Open();
+                    List<string> tables = GetTablesList(conn);
+
+                    if (_sqlTables != null)
+                    {
+                        _sqlTables.Items.Clear();
+                        foreach (string t in tables)
+                            _sqlTables.Items.Add(t);
+                        if (_sqlTables.Items.Count > 0)
+                            _sqlTables.SelectedIndex = 0;
+                    }
+
+                    SetStatus("SQL", "Baza " + dbName + ": tabel " + tables.Count + ".");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Błąd pobierania tabel: " + ex.Message, "Błąd",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                SetStatus("SQL", "Błąd pobierania tabel");
+            }
+        }
+
+        private List<string> GetTablesList(SqlConnection conn)
+        {
+            List<string> list = new List<string>();
+
+            using (SqlCommand cmd = new SqlCommand(@"
+                SELECT TABLE_SCHEMA, TABLE_NAME
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_TYPE = 'BASE TABLE'
+                ORDER BY TABLE_SCHEMA, TABLE_NAME;", conn))
+            using (SqlDataReader r = cmd.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    string schema = r.GetString(0);
+                    string name = r.GetString(1);
+                    list.Add(schema + "." + name);
+                }
+            }
+
+            return list;
+        }
+
+        private void SqlGenerate_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_sqlDatabases == null || _sqlTables == null || _sqlScript == null)
+                    return;
+
+                _sqlScript.Clear();
+
+                if (_sqlDatabases.SelectedItem == null || _sqlTables.SelectedItem == null)
+                {
+                    MessageBox.Show(this, "Wybierz bazę danych i tabelę.", "Informacja",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(_sqlBaseConnectionString))
+                {
+                    MessageBox.Show(this, "Najpierw połącz się z serwerem.", "Informacja",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                string dbName = _sqlDatabases.SelectedItem.ToString();
+                string tableFull = _sqlTables.SelectedItem.ToString();
+                string[] parts = tableFull.Split('.');
+                if (parts.Length != 2)
+                {
+                    MessageBox.Show(this, "Nieprawidłowa nazwa tabeli.", "Błąd",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                string schema = parts[0];
+                string table = parts[1];
+
+                string connStr = _sqlBaseConnectionString + "Database=" + dbName + ";";
+
+                StringBuilder sb = new StringBuilder();
+                SetStatus("SQL", "Generowanie skryptu...");
+
+                using (SqlConnection conn = new SqlConnection(connStr))
+                {
+                    conn.Open();
+
+                    string createScript = GenerateCreateTableScript(conn, schema, table);
+                    sb.AppendLine("-- Skrypt dla tabeli " + schema + "." + table + " w bazie " + dbName);
+                    sb.AppendLine("SET ANSI_NULLS ON;");
+                    sb.AppendLine("SET QUOTED_IDENTIFIER ON;");
+                    sb.AppendLine();
+                    sb.AppendLine(createScript);
+                    sb.AppendLine("GO");
+                    sb.AppendLine();
+
+                    if (_sqlIncludeData != null && _sqlIncludeData.Checked)
+                    {
+                        string where = _sqlWhere == null ? "" : _sqlWhere.Text.Trim();
+                        int rowCount;
+                        string insertScript = GenerateInsertForTable(conn, schema, table, where, out rowCount);
+                        sb.AppendLine(insertScript);
+                        SetStatus("SQL", "CREATE TABLE + " + rowCount + " wierszy INSERT.");
+                    }
+                    else
+                    {
+                        SetStatus("SQL", "Wygenerowano tylko CREATE TABLE.");
+                    }
+                }
+
+                _sqlScript.Text = sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Błąd generowania skryptu: " + ex.Message, "Błąd",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void SqlSaveToFile_Click(object sender, EventArgs e)
+        {
+            if (_sqlScript == null || string.IsNullOrEmpty(_sqlScript.Text))
+            {
+                MessageBox.Show(this, "Brak skryptu do zapisania.", "Informacja",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using (SaveFileDialog sfd = new SaveFileDialog())
+            {
+                sfd.Filter = "Pliki SQL (*.sql)|*.sql|Wszystkie pliki (*.*)|*.*";
+
+                string dbName = _sqlDatabases != null && _sqlDatabases.SelectedItem != null
+                    ? _sqlDatabases.SelectedItem.ToString()
+                    : "DB";
+                string table = _sqlTables != null && _sqlTables.SelectedItem != null
+                    ? _sqlTables.SelectedItem.ToString()
+                    : "Table";
+
+                sfd.FileName = dbName + "_" + table + ".sql";
+
+                if (sfd.ShowDialog(this) == DialogResult.OK)
+                {
+                    File.WriteAllText(sfd.FileName, _sqlScript.Text, Encoding.UTF8);
+                    SetStatus("SQL", "Zapisano do " + sfd.FileName + ".");
+                }
+            }
+        }
+
+        // === NOWE: skryptowanie obiektu z tempdb po object_id ===
+        private void SqlScriptTempObject_Click(object sender, EventArgs e)
+        {
+            if (_sqlScript == null)
+                return;
+
+            _sqlScript.Clear();
+
+            if (string.IsNullOrEmpty(_sqlBaseConnectionString))
+            {
+                MessageBox.Show(this, "Najpierw połącz się z serwerem (Połącz).", "Informacja",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_sqlTempObjectId == null || string.IsNullOrWhiteSpace(_sqlTempObjectId.Text))
+            {
+                MessageBox.Show(this, "Podaj object_id obiektu w tempdb.", "Informacja",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (!int.TryParse(_sqlTempObjectId.Text.Trim(), out int objectId))
+            {
+                MessageBox.Show(this, "Nieprawidłowy object_id (oczekiwano liczby całkowitej).", "Błąd",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            try
+            {
+                string connStr = _sqlBaseConnectionString + "Database=tempdb;";
+                using (SqlConnection conn = new SqlConnection(connStr))
+                {
+                    conn.Open();
+
+                    string objName = null;
+                    string schemaName = null;
+
+                    using (SqlCommand cmd = new SqlCommand(@"
+                        SELECT t.name, s.name AS schema_name
+                        FROM sys.tables t
+                        JOIN sys.schemas s ON t.schema_id = s.schema_id
+                        WHERE t.object_id = @obj;", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@obj", objectId);
+
+                        using (SqlDataReader r = cmd.ExecuteReader())
+                        {
+                            if (r.Read())
+                            {
+                                objName = r.GetString(0);
+                                schemaName = r.IsDBNull(1) ? "dbo" : r.GetString(1);
+                            }
+                        }
+                    }
+
+                    if (objName == null)
+                    {
+                        MessageBox.Show(this,
+                            "Nie znaleziono tabeli użytkownika w tempdb dla object_id = " + objectId,
+                            "Informacja",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                        SetStatus("SQL", "Brak tabeli w tempdb.");
+                        return;
+                    }
+
+                    StringBuilder sb = new StringBuilder();
+                    sb.AppendLine("-- Skrypt obiektu z tempdb (object_id = " + objectId + ")");
+                    sb.AppendLine("-- Nazwa: " + schemaName + "." + objName);
+                    sb.AppendLine("USE tempdb;");
+                    sb.AppendLine("GO");
+                    sb.AppendLine();
+
+                    string createScript = GenerateCreateTableScriptForObjectId(conn, objectId, schemaName, objName);
+                    sb.AppendLine(createScript);
+                    sb.AppendLine("GO");
+                    sb.AppendLine();
+
+                    if (_sqlIncludeData != null && _sqlIncludeData.Checked)
+                    {
+                        int rowCount;
+                        string dataScript = GenerateInsertForTable(conn, schemaName, objName, "", out rowCount);
+                        sb.AppendLine(dataScript);
+                        SetStatus("SQL", "CREATE TABLE + " + rowCount + " wierszy INSERT z tempdb.");
+                    }
+                    else
+                    {
+                        SetStatus("SQL", "Wygenerowano tylko CREATE TABLE z tempdb.");
+                    }
+
+                    _sqlScript.Text = sb.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Błąd skryptowania obiektu z tempdb:\n" + ex.Message, "Błąd",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                SetStatus("SQL", "Błąd skryptowania z tempdb.");
+            }
+        }
+
+        // ==== Generowanie T-SQL (CREATE + INSERT) ====
+        private class ColumnInfo
+        {
+            public string Name { get; set; }
+            public string DataType { get; set; }
+            public bool IsNullable { get; set; }
+            public int? MaxLength { get; set; }
+            public string Default { get; set; }
+            public byte? NumericPrecision { get; set; }
+            public int? NumericScale { get; set; }
+        }
+
+        private string GenerateCreateTableScript(SqlConnection conn, string schema, string table)
+        {
+            List<ColumnInfo> columns = new List<ColumnInfo>();
+
+            using (SqlCommand cmd = new SqlCommand(@"
+                SELECT 
+                    c.COLUMN_NAME,
+                    c.DATA_TYPE,
+                    c.IS_NULLABLE,
+                    c.CHARACTER_MAXIMUM_LENGTH,
+                    c.COLUMN_DEFAULT,
+                    c.NUMERIC_PRECISION,
+                    c.NUMERIC_SCALE
+                FROM INFORMATION_SCHEMA.COLUMNS c
+                WHERE c.TABLE_SCHEMA = @schema
+                  AND c.TABLE_NAME = @table
+                ORDER BY c.ORDINAL_POSITION;", conn))
+            {
+                cmd.Parameters.AddWithValue("@schema", schema);
+                cmd.Parameters.AddWithValue("@table", table);
+
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        ColumnInfo col = new ColumnInfo();
+                        col.Name = r.GetString(0);
+                        col.DataType = r.GetString(1);
+                        col.IsNullable = r.GetString(2) == "YES";
+                        col.MaxLength = r.IsDBNull(3) ? (int?)null : r.GetInt32(3);
+                        col.Default = r.IsDBNull(4) ? null : r.GetString(4);
+                        col.NumericPrecision = r.IsDBNull(5) ? (byte?)null : r.GetByte(5);
+                        col.NumericScale = r.IsDBNull(6) ? (int?)null : Convert.ToInt32(r.GetValue(6));
+                        columns.Add(col);
+                    }
+                }
+            }
+
+            List<string> pkColumns = new List<string>();
+            string pkName = null;
+
+            using (SqlCommand cmd = new SqlCommand(@"
+                SELECT k.COLUMN_NAME, k.ORDINAL_POSITION, t.CONSTRAINT_NAME
+                FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS t
+                JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k
+                  ON t.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+                 AND t.TABLE_SCHEMA = k.TABLE_SCHEMA
+                 AND t.TABLE_NAME = k.TABLE_NAME
+                WHERE t.TABLE_SCHEMA = @schema
+                  AND t.TABLE_NAME = @table
+                  AND t.CONSTRAINT_TYPE = 'PRIMARY KEY'
+                ORDER BY k.ORDINAL_POSITION;", conn))
+            {
+                cmd.Parameters.AddWithValue("@schema", schema);
+                cmd.Parameters.AddWithValue("@table", table);
+
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        pkColumns.Add(r.GetString(0));
+                        if (pkName == null)
+                            pkName = r.GetString(2);
+                    }
+                }
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("CREATE TABLE [" + schema + "].[" + table + "]");
+            sb.AppendLine("(");
+
+            List<string> lines = new List<string>();
+
+            foreach (ColumnInfo col in columns)
+            {
+                string t = BuildSqlType(col);
+                string nullStr = col.IsNullable ? "NULL" : "NOT NULL";
+
+                string defaultStr = "";
+                if (!string.IsNullOrEmpty(col.Default))
+                {
+                    defaultStr = " DEFAULT " + col.Default;
+                }
+
+                string line = "    [" + col.Name + "] " + t + " " + nullStr + defaultStr;
+                lines.Add(line);
+            }
+
+            if (pkColumns.Count > 0)
+            {
+                List<string> pkColsQuoted = new List<string>();
+                foreach (string c in pkColumns)
+                    pkColsQuoted.Add("[" + c + "]");
+
+                if (string.IsNullOrEmpty(pkName))
+                    pkName = "PK_" + table;
+
+                string pkLine = "    CONSTRAINT [" + pkName + "] PRIMARY KEY CLUSTERED (" +
+                                string.Join(", ", pkColsQuoted) + ")";
+                lines.Add(pkLine);
+            }
+
+            sb.AppendLine(string.Join(",\n", lines));
+            sb.Append(")");
+
+            return sb.ToString();
+        }
+
+        // NOWE: wersja dla tempdb.sys.tables po object_id
+        private string GenerateCreateTableScriptForObjectId(SqlConnection conn, int objectId, string schema, string table)
+        {
+            List<ColumnInfo> columns = new List<ColumnInfo>();
+
+            using (SqlCommand cmd = new SqlCommand(@"
+                SELECT 
+                    c.name,
+                    t.name AS data_type,
+                    c.is_nullable,
+                    c.max_length,
+                    c.precision,
+                    c.scale,
+                    dc.definition AS column_default
+                FROM sys.columns c
+                JOIN sys.types t ON c.user_type_id = t.user_type_id
+                LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id
+                WHERE c.object_id = @obj
+                ORDER BY c.column_id;", conn))
+            {
+                cmd.Parameters.AddWithValue("@obj", objectId);
+
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        ColumnInfo col = new ColumnInfo();
+                        col.Name = r.GetString(0);
+                        col.DataType = r.GetString(1);
+                        col.IsNullable = r.GetBoolean(2);
+                        col.MaxLength = r.IsDBNull(3) ? (int?)null : Convert.ToInt32(r.GetInt16(3));
+                        col.NumericPrecision = r.IsDBNull(4) ? (byte?)null : r.GetByte(4);
+                        col.NumericScale = r.IsDBNull(5) ? (int?)null : Convert.ToInt32(r.GetByte(5));
+                        col.Default = r.IsDBNull(6) ? null : r.GetString(6);
+                        columns.Add(col);
+                    }
+                }
+            }
+
+            List<string> pkColumns = new List<string>();
+            string pkName = null;
+
+            using (SqlCommand cmd = new SqlCommand(@"
+                SELECT c.name, ic.key_ordinal, kc.name AS constraint_name
+                FROM sys.key_constraints kc
+                JOIN sys.index_columns ic 
+                  ON kc.parent_object_id = ic.object_id 
+                 AND kc.unique_index_id = ic.index_id
+                JOIN sys.columns c 
+                  ON ic.object_id = c.object_id 
+                 AND ic.column_id = c.column_id
+                WHERE kc.parent_object_id = @obj
+                  AND kc.type = 'PK'
+                ORDER BY ic.key_ordinal;", conn))
+            {
+                cmd.Parameters.AddWithValue("@obj", objectId);
+
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        pkColumns.Add(r.GetString(0));
+                        if (pkName == null)
+                            pkName = r.GetString(2);
+                    }
+                }
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("CREATE TABLE [" + schema + "].[" + table + "]");
+            sb.AppendLine("(");
+
+            List<string> lines = new List<string>();
+
+            foreach (ColumnInfo col in columns)
+            {
+                string t = BuildSqlType(col);
+                string nullStr = col.IsNullable ? "NULL" : "NOT NULL";
+
+                string defaultStr = "";
+                if (!string.IsNullOrEmpty(col.Default))
+                {
+                    defaultStr = " DEFAULT " + col.Default;
+                }
+
+                string line = "    [" + col.Name + "] " + t + " " + nullStr + defaultStr;
+                lines.Add(line);
+            }
+
+            if (pkColumns.Count > 0)
+            {
+                List<string> pkColsQuoted = new List<string>();
+                foreach (string c in pkColumns)
+                    pkColsQuoted.Add("[" + c + "]");
+
+                if (string.IsNullOrEmpty(pkName))
+                    pkName = "PK_" + table;
+
+                string pkLine = "    CONSTRAINT [" + pkName + "] PRIMARY KEY CLUSTERED (" +
+                                string.Join(", ", pkColsQuoted) + ")";
+                lines.Add(pkLine);
+            }
+
+            sb.AppendLine(string.Join(",\n", lines));
+            sb.Append(")");
+
+            return sb.ToString();
+        }
+
+        private string BuildSqlType(ColumnInfo col)
+        {
+            string t = col.DataType.ToLowerInvariant();
+
+            switch (t)
+            {
+                case "char":
+                case "varchar":
+                case "nchar":
+                case "nvarchar":
+                case "binary":
+                case "varbinary":
+                    if (col.MaxLength == null || col.MaxLength <= 0)
+                        return t + "(max)";
+
+                    return t + "(" + (col.MaxLength == -1 ? "max" : col.MaxLength.ToString()) + ")";
+
+                case "decimal":
+                case "numeric":
+                    if (col.NumericPrecision != null && col.NumericScale != null)
+                        return t + "(" + col.NumericPrecision + "," + col.NumericScale + ")";
+                    return t;
+
+                default:
+                    return t;
+            }
+        }
+
+        private string GenerateInsertForTable(SqlConnection conn, string schema, string table, string whereClause, out int rowCount)
+        {
+            string sql = "SELECT * FROM [" + schema + "].[" + table + "]";
+            if (!string.IsNullOrWhiteSpace(whereClause))
+            {
+                sql += " WHERE " + whereClause;
+            }
+
+            DataTable dt = new DataTable();
+            using (SqlDataAdapter da = new SqlDataAdapter(sql, conn))
+            {
+                da.Fill(dt);
+            }
+
+            if (dt.Rows.Count == 0)
+            {
+                rowCount = 0;
+                if (!string.IsNullOrWhiteSpace(whereClause))
+                    return "-- Tabela [" + schema + "].[" + table + "] – brak danych dla WHERE " + whereClause + ".\n";
+                return "-- Tabela [" + schema + "].[" + table + "] jest pusta.\n";
+            }
+
+            rowCount = dt.Rows.Count;
+
+            StringBuilder sb = new StringBuilder();
+
+            string[] columnNames = new string[dt.Columns.Count];
+            for (int i = 0; i < dt.Columns.Count; i++)
+                columnNames[i] = "[" + dt.Columns[i].ColumnName + "]";
+
+            string columnList = string.Join(", ", columnNames);
+
+            if (!string.IsNullOrWhiteSpace(whereClause))
+                sb.AppendLine("-- Dane tabeli [" + schema + "].[" + table + "] (WHERE " + whereClause + ")");
+            else
+                sb.AppendLine("-- Dane tabeli [" + schema + "].[" + table + "]");
+
+            for (int r = 0; r < dt.Rows.Count; r++)
+            {
+                DataRow row = dt.Rows[r];
+                string[] values = new string[dt.Columns.Count];
+
+                for (int c = 0; c < dt.Columns.Count; c++)
+                {
+                    object val = row[c];
+                    Type type = dt.Columns[c].DataType;
+                    values[c] = ToSqlLiteral(val, type);
+                }
+
+                string valuesList = string.Join(", ", values);
+                sb.AppendLine("INSERT INTO [" + schema + "].[" + table + "] (" + columnList + ") VALUES (" + valuesList + ");");
+            }
+
+            return sb.ToString();
+        }
+
+        private string ToSqlLiteral(object value, Type type)
+        {
+            if (value == null || value == DBNull.Value)
+                return "NULL";
+
+            if (type == typeof(string) || type == typeof(char))
+            {
+                string s = value.ToString().Replace("'", "''");
+                return "N'" + s + "'";
+            }
+
+            if (type == typeof(DateTime))
+            {
+                DateTime dt = (DateTime)value;
+                return "'" + dt.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) + "'";
+            }
+
+            if (type == typeof(bool))
+            {
+                return ((bool)value) ? "1" : "0";
+            }
+
+            if (type == typeof(byte[]))
+            {
+                byte[] bytes = (byte[])value;
+                if (bytes.Length == 0) return "0x";
+                StringBuilder sb = new StringBuilder("0x");
+                foreach (byte b in bytes)
+                    sb.Append(b.ToString("X2"));
+                return sb.ToString();
+            }
+
+            if (type.IsPrimitive || type == typeof(decimal))
+            {
+                return Convert.ToString(value, CultureInfo.InvariantCulture);
+            }
+
+            string fallback = value.ToString().Replace("'", "''");
+            return "N'" + fallback + "'";
+        }
+
+        // ====== Pomocnicze ======
+        private class TabBinding
+        {
+            public DataTable Table { get; set; }
+            public DataGridView Grid { get; set; }
+        }
     }
 }
+    
