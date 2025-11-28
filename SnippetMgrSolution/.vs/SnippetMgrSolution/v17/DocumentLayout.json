@@ -3,12 +3,12 @@
   "WorkspaceRootPath": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\sqleditor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\sqleditor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\sqleditor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\sqleditor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\services.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -58,7 +58,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 5,
+          "SelectedChildIndex": 1,
           "Children": [
             {
               "$type": "Document",
@@ -73,13 +73,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "Form1.cs",
               "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Form1.cs",
               "RelativeDocumentMoniker": "SnippetMgrSolution\\Form1.cs",
               "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Form1.cs",
               "RelativeToolTip": "SnippetMgrSolution\\Form1.cs",
-              "ViewState": "AgIAABIHAAAAAAAAAAAswDUHAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAABQIAAAAAAAAAAAswDcIAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-21T11:19:31.063Z",
               "EditorCaption": ""
@@ -94,8 +94,7 @@
               "RelativeToolTip": "SnippetMgrSolution\\Services.cs",
               "ViewState": "AgIAAIICAAAAAAAAAAAiwKMCAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-27T07:26:39.786Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-27T07:26:39.786Z"
             },
             {
               "$type": "Document",
@@ -107,8 +106,7 @@
               "RelativeToolTip": "SnippetMgrSolution\\Contracts.cs",
               "ViewState": "AgIAAIMAAAAAAAAAAAAswKYAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-27T07:18:49.2Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-27T07:18:49.2Z"
             },
             {
               "$type": "Document",
@@ -124,13 +122,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "SqlEditor.cs",
               "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\SqlEditor.cs",
               "RelativeDocumentMoniker": "SnippetMgrSolution\\SqlEditor.cs",
               "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\SqlEditor.cs",
               "RelativeToolTip": "SnippetMgrSolution\\SqlEditor.cs",
-              "ViewState": "AgIAAHoCAAAAAAAAAAAswI0CAAARAAAAAAAAAA==",
+              "ViewState": "AgIAAHoCAAAAAAAAAAAswIkCAAA4AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-21T14:22:18.918Z",
               "EditorCaption": ""

@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Drawing;
-using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -63,7 +62,7 @@ namespace SnippetMgr
         private ComboBox _cmbDb = null!;
         private Button _btnConnect = null!;
 
-        // Pola generatora (kluczowe dla "Generuj z Tabeli")
+        // Pola generatora
         private TextBox _txtWhere = null!;
         private ComboBox _cmbTables = null!;
 
@@ -87,8 +86,14 @@ namespace SnippetMgr
         private RichTextBox _rtbLinear = null!;
 
         // Przyciski akcji
-        private Button _btnGenTable = null!;    // Generator (z tabeli)
-        private Button _btnRunQuery = null!;    // JEDEN przycisk w "Własny SQL"
+        private Button _btnGenTable = null!;            // Zakładka Generator
+        private Button _btnRunQuery = null!;            // F5
+        private Button _btnGenQuery = null!;            // "GENERUJ Z SQL"
+        private Button _btnGenTableFromSqlTab = null!;  // "GENERUJ Z TABELI"
+
+        // --- PORÓWNYWANIE ---
+        private RichTextBox _txtDiffLeft = null!;
+        private RichTextBox _txtDiffRight = null!;
 
         public Form1(IConfigService configService, ICommandService commandService, ISqlService sqlService, ILogger<Form1> logger)
         {
@@ -330,6 +335,9 @@ namespace SnippetMgr
                 foreach (var tab in _config.Tabs)
                     BuildSmartTab($"{i++}. {tab.Name}", tab.Entries, "snippet");
             }
+
+            // 6. PORÓWNYWANIE
+            BuildCompareTab();
         }
 
         // --- 1. SQL LAB ---
@@ -612,16 +620,41 @@ namespace SnippetMgr
 
             _btnRunQuery = new Button
             {
-                Text = "URUCHOM + GENERUJ (F5)",
+                Text = "▶ URUCHOM (F5)",
                 Dock = DockStyle.Right,
-                Width = 190,
+                Width = 140,
                 BackColor = C_Accent,
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat
             };
             _btnRunQuery.FlatAppearance.BorderSize = 0;
 
-            sqlBottom.Controls.Add(_btnRunQuery);
+            _btnGenQuery = new Button
+            {
+                Text = "GENERUJ Z SQL",
+                Dock = DockStyle.Left,
+                Width = 140,
+                BackColor = Color.Orange,
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            _btnGenQuery.FlatAppearance.BorderSize = 0;
+
+            _btnGenTableFromSqlTab = new Button
+            {
+                Text = "GENERUJ Z TABELI",
+                Dock = DockStyle.Left,
+                Width = 140,
+                BackColor = Color.SteelBlue,
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Margin = new Padding(5, 0, 0, 0)
+            };
+            _btnGenTableFromSqlTab.FlatAppearance.BorderSize = 0;
+
+            sqlBottom.Controls.Add(_btnRunQuery);           // Dock Right
+            sqlBottom.Controls.Add(_btnGenTableFromSqlTab); // Left
+            sqlBottom.Controls.Add(_btnGenQuery);           // Left
 
             tSql.Controls.Add(_sqlEditor);
             tSql.Controls.Add(sqlBottom);
@@ -706,7 +739,8 @@ namespace SnippetMgr
                 Dock = DockStyle.Fill,
                 Font = _fontCode,
                 AcceptsTab = true,
-                WordWrap = false
+                WordWrap = false,
+                ScrollBars = RichTextBoxScrollBars.Both
             };
             _rtbScript.TextChanged += (s, e) =>
             {
@@ -743,7 +777,8 @@ namespace SnippetMgr
                 Dock = DockStyle.Fill,
                 Font = _fontCode,
                 ReadOnly = true,
-                BackColor = Color.WhiteSmoke
+                BackColor = Color.WhiteSmoke,
+                ScrollBars = RichTextBoxScrollBars.Both
             };
             _tabLinear.Controls.Add(_rtbLinear);
 
@@ -857,7 +892,6 @@ namespace SnippetMgr
                 }
             };
 
-            // Obsługa nawiasów i poprawne parsowanie nazwy tabeli przy rozwijaniu drzewa
             _treeTables.BeforeExpand += async (s, e) =>
             {
                 if (e.Node.Nodes.Count == 1 && e.Node.Nodes[0].Text == ".")
@@ -927,6 +961,7 @@ namespace SnippetMgr
                     var whereText = _txtWhere.Text?.Trim() ?? string.Empty;
 
                     var create = await _sqlService.GenerateCreateTableAsync(_cmbDb.Text, schema, table, _chkT.Checked);
+
                     var insert = _chkD.Checked
                         ? await _sqlService.GenerateInsertAsync(_cmbDb.Text, schema, table, whereText, _chkT.Checked)
                         : string.Empty;
@@ -936,6 +971,7 @@ namespace SnippetMgr
                     SqlSyntaxHighlighter.Highlight(_rtbScript);
                     _resultTabs.SelectedTab = _tabScript;
 
+                    // Podgląd danych
                     var sb = new StringBuilder();
                     sb.Append($"SELECT TOP 100 * FROM [{schema}].[{table}]");
 
@@ -958,7 +994,71 @@ namespace SnippetMgr
             // 1. GENERATOR – skrypt + SELECT TOP 100
             _btnGenTable.Click += async (s, e) => await GenerateTableScriptAsync();
 
-            // 2. WŁASNY SQL – JEDEN PRZYCISK: URUCHOM + (JEŚLI SELECT) GENERUJ CREATE TABLE #TMP + INSERT
+            // 2. WŁASNY SQL - GENERUJ Z TABELI
+            _btnGenTableFromSqlTab.Click += async (s, e) => await GenerateTableScriptAsync();
+
+            // 3. WŁASNY SQL – GENERUJ Z EDYTORA (CREATE TABLE + INSERT)
+            _btnGenQuery.Click += async (s, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(_cmbDb.Text))
+                    return;
+
+                try
+                {
+                    var rawQuery = !string.IsNullOrWhiteSpace(_sqlEditor.InnerEditor.SelectedText)
+                        ? _sqlEditor.InnerEditor.SelectedText
+                        : _sqlEditor.Text;
+
+                    if (string.IsNullOrWhiteSpace(rawQuery))
+                    {
+                        MessageBox.Show("Brak zapytania w edytorze.", "GENERUJ Z SQL",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+
+                    var statements = SplitSqlStatements(rawQuery);
+                    var firstSelect = statements
+                        .FirstOrDefault(st => st.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                        ?? statements.FirstOrDefault();
+
+                    if (string.IsNullOrWhiteSpace(firstSelect))
+                    {
+                        MessageBox.Show("Nie znaleziono instrukcji SELECT do wygenerowania tabeli tymczasowej.",
+                            "GENERUJ Z SQL",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    var script = await _sqlService.GenerateScriptFromQueryAsync(
+                        _cmbDb.Text,
+                        firstSelect,
+                        _chkT.Checked,
+                        _chkD.Checked
+                    );
+
+                    if (string.IsNullOrWhiteSpace(script))
+                    {
+                        MessageBox.Show("Serwis nie zwrócił skryptu. Upewnij się, że SELECT jest poprawny.",
+                            "GENERUJ Z SQL",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        _rtbScript.Text = WrapTran(script);
+                        SqlSyntaxHighlighter.Highlight(_rtbScript);
+                        _resultTabs.SelectedTab = _tabScript;
+                    }
+
+                    await RunQueriesAsync(_cmbDb.Text, rawQuery);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Błąd generowania skryptu z SQL: " + ex.Message,
+                        "GENERUJ Z SQL",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+
             _btnRunQuery.Click += async (s, e) =>
             {
                 if (string.IsNullOrWhiteSpace(_cmbDb.Text))
@@ -970,85 +1070,13 @@ namespace SnippetMgr
 
                 try
                 {
-                    SetStatus("Wykonywanie zapytania i generowanie skryptu...");
+                    SetStatus("Wykonywanie zapytania...");
 
-                    var rawQuery = !string.IsNullOrWhiteSpace(_sqlEditor.InnerEditor.SelectedText)
+                    var query = !string.IsNullOrWhiteSpace(_sqlEditor.InnerEditor.SelectedText)
                         ? _sqlEditor.InnerEditor.SelectedText
                         : _sqlEditor.Text;
 
-                    if (string.IsNullOrWhiteSpace(rawQuery))
-                    {
-                        MessageBox.Show("Brak zapytania w edytorze.", "SQL",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        SetStatus("Gotowy.");
-                        return;
-                    }
-
-                    // 1) rozbij na instrukcje i znajdź pierwszy SELECT
-                    var statements = SplitSqlStatements(rawQuery);
-                    var firstSelect = statements
-                        .FirstOrDefault(st => st.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase));
-
-                    // 2) jeśli jest SELECT → generujemy CREATE TABLE #TmpResult(...) + INSERT
-                    if (!string.IsNullOrWhiteSpace(firstSelect))
-                    {
-                        var previewRes = await _sqlService.ExecuteQueryAsync(_cmbDb.Text, firstSelect);
-
-                        if (previewRes.Data != null && previewRes.Data.Columns.Count > 0)
-                        {
-                            var dt = previewRes.Data;
-                            string tempName = _chkT.Checked ? "#TmpResult" : "TmpResult";
-
-                            var sbCreate = new StringBuilder();
-                            sbCreate.AppendLine($"CREATE TABLE {tempName} (");
-
-                            for (int i = 0; i < dt.Columns.Count; i++)
-                            {
-                                var col = dt.Columns[i];
-                                string sqlType = MapDotNetTypeToSql(col.DataType);
-                                string nullable = col.AllowDBNull ? "NULL" : "NOT NULL";
-
-                                sbCreate.Append($"    [{col.ColumnName}] {sqlType} {nullable}");
-                                if (i < dt.Columns.Count - 1)
-                                    sbCreate.Append(",");
-                                sbCreate.AppendLine();
-                            }
-
-                            sbCreate.AppendLine(");");
-
-                            var sbScript = new StringBuilder();
-                            sbScript.AppendLine(sbCreate.ToString());
-
-                            if (_chkD.Checked && dt.Rows.Count > 0)
-                            {
-                                // INSERT z wartościami
-                                var colNames = dt.Columns.Cast<DataColumn>()
-                                    .Select(c => $"[{c.ColumnName}]")
-                                    .ToArray();
-                                string colList = string.Join(", ", colNames);
-
-                                foreach (DataRow row in dt.Rows)
-                                {
-                                    var values = new List<string>();
-                                    foreach (DataColumn c in dt.Columns)
-                                    {
-                                        values.Add(FormatSqlLiteral(row[c], c.DataType));
-                                    }
-
-                                    sbScript.Append("INSERT INTO ").Append(tempName)
-                                            .Append(" (").Append(colList).Append(") VALUES (")
-                                            .Append(string.Join(", ", values)).AppendLine(");");
-                                }
-                            }
-
-                            _rtbScript.Text = WrapTran(sbScript.ToString());
-                            SqlSyntaxHighlighter.Highlight(_rtbScript);
-                            _resultTabs.SelectedTab = _tabScript;
-                        }
-                    }
-
-                    // 3) zawsze wykonaj cały SQL (wszystkie zapytania)
-                    await RunQueriesAsync(_cmbDb.Text, rawQuery);
+                    await RunQueriesAsync(_cmbDb.Text, query);
 
                     SetStatus("Gotowe.");
                 }
@@ -1102,7 +1130,7 @@ namespace SnippetMgr
                 }
             };
 
-            // DRAG & DROP + rozwijane pole zaznaczonej tabeli
+            // DRAG & DROP + context menu na zaznaczonej tabeli
             SetupTreeToEditorDragDrop();
         }
 
@@ -1116,6 +1144,9 @@ namespace SnippetMgr
             var results = new List<QueryResult>();
             foreach (var stmt in statements)
             {
+                if (string.IsNullOrWhiteSpace(stmt))
+                    continue;
+
                 var res = await _sqlService.ExecuteQueryAsync(db, stmt);
                 results.Add(res);
             }
@@ -1129,7 +1160,6 @@ namespace SnippetMgr
             if (string.IsNullOrWhiteSpace(sql))
                 return result;
 
-            // 1. proste rozbicie po ';' (poza stringami)
             var tmp = new List<string>();
             var sb = new StringBuilder();
             bool inString = false;
@@ -1160,7 +1190,6 @@ namespace SnippetMgr
             if (tail.Length > 0)
                 tmp.Add(tail);
 
-            // 2. rozbicie po liniach GO
             foreach (var block in tmp)
             {
                 var lines = block.Replace("\r", "").Split('\n');
@@ -1271,99 +1300,6 @@ namespace SnippetMgr
             g.AllowUserToAddRows = false;
             g.AllowUserToDeleteRows = false;
             g.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
-        }
-
-        // Mapowanie typów .NET → SQL
-        private string MapDotNetTypeToSql(Type t)
-        {
-            if (t == typeof(string) || t == typeof(char))
-                return "NVARCHAR(MAX)";
-            if (t == typeof(int))
-                return "INT";
-            if (t == typeof(long))
-                return "BIGINT";
-            if (t == typeof(short))
-                return "SMALLINT";
-            if (t == typeof(byte))
-                return "TINYINT";
-            if (t == typeof(bool))
-                return "BIT";
-            if (t == typeof(DateTime))
-                return "DATETIME2";
-            if (t == typeof(decimal))
-                return "DECIMAL(18,4)";
-            if (t == typeof(double))
-                return "FLOAT";
-            if (t == typeof(float))
-                return "REAL";
-            if (t == typeof(Guid))
-                return "UNIQUEIDENTIFIER";
-            if (t == typeof(byte[]))
-                return "VARBINARY(MAX)";
-
-            // fallback
-            return "NVARCHAR(MAX)";
-        }
-
-        // Formatowanie wartości na literały SQL
-        private string FormatSqlLiteral(object? value, Type type)
-        {
-            if (value == null || value == DBNull.Value)
-                return "NULL";
-
-            if (type == typeof(string) || type == typeof(char))
-            {
-                var s = value.ToString() ?? string.Empty;
-                s = s.Replace("'", "''");
-                return "N'" + s + "'";
-            }
-
-            if (type == typeof(DateTime))
-            {
-                var dt = (DateTime)value;
-                return "'" + dt.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) + "'";
-            }
-
-            if (type == typeof(bool))
-            {
-                return (bool)value ? "1" : "0";
-            }
-
-            if (type == typeof(Guid))
-            {
-                return "'" + ((Guid)value).ToString("D") + "'";
-            }
-
-            if (type == typeof(byte[]))
-            {
-                var bytes = (byte[])value;
-                if (bytes.Length == 0) return "0x";
-                return "0x" + BitConverter.ToString(bytes).Replace("-", "");
-            }
-
-            if (type.IsEnum)
-            {
-                return Convert.ToInt64(value).ToString(CultureInfo.InvariantCulture);
-            }
-
-            if (type == typeof(decimal) ||
-                type == typeof(double) ||
-                type == typeof(float))
-            {
-                return Convert.ToString(value, CultureInfo.InvariantCulture) ?? "NULL";
-            }
-
-            if (type == typeof(byte) || type == typeof(short) || type == typeof(int) ||
-                type == typeof(long) || type == typeof(sbyte) || type == typeof(ushort) ||
-                type == typeof(uint) || type == typeof(ulong))
-            {
-                return Convert.ToString(value, CultureInfo.InvariantCulture) ?? "NULL";
-            }
-
-            // Fallback – traktujemy jak tekst
-            var fallback = value.ToString() ?? string.Empty;
-            fallback = fallback.Replace("'", "''");
-            return "N'" + fallback + "'";
         }
 
         // Ładniejszy grid dla zakładek Snippety / Aplikacje / Foldery / Notatki
@@ -1678,6 +1614,328 @@ namespace SnippetMgr
             }
         }
 
+        // --- 6. PORÓWNYWANIE ---
+        private void BuildCompareTab()
+        {
+            var page = new TabPage("6. Porównywanie")
+            {
+                BackColor = C_Background
+            };
+
+            page.Padding = new Padding(8);
+
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            page.Controls.Add(root);
+
+            // Pasek narzędzi (góra)
+            var topPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                BackColor = Color.White,
+                Padding = new Padding(8)
+            };
+
+            var btnCompare = new Button
+            {
+                Text = "⚖ Porównaj",
+                AutoSize = true
+            };
+            var btnSwap = new Button
+            {
+                Text = "⇄ Zamień strony",
+                AutoSize = true,
+                Margin = new Padding(8, 0, 0, 0)
+            };
+
+            var chkIgnoreCase = new CheckBox
+            {
+                Text = "Ignoruj wielkość liter",
+                AutoSize = true,
+                Checked = true,
+                Margin = new Padding(15, 3, 0, 0)
+            };
+            var chkIgnoreWhitespace = new CheckBox
+            {
+                Text = "Ignoruj różnice w białych znakach",
+                AutoSize = true,
+                Checked = true,
+                Margin = new Padding(15, 3, 0, 0)
+            };
+
+            var lblInfo = new Label
+            {
+                AutoSize = true,
+                ForeColor = Color.DimGray,
+                Margin = new Padding(20, 7, 0, 0),
+                Text = "Wpisz / wklej teksty po lewej i prawej, potem kliknij „Porównaj”."
+            };
+
+            topPanel.Controls.AddRange(new Control[]
+            {
+                btnCompare, btnSwap, chkIgnoreCase, chkIgnoreWhitespace, lblInfo
+            });
+
+            root.Controls.Add(topPanel, 0, 0);
+
+            // Dolna część – dwa okna z numerami linii
+            var split = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Vertical,
+                SplitterDistance = page.Width / 2,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // LEWA STRONA
+            CreateDiffEditor(split.Panel1, out _txtDiffLeft);
+
+            // PRAWA STRONA
+            CreateDiffEditor(split.Panel2, out _txtDiffRight);
+
+            root.Controls.Add(split, 0, 1);
+
+            _tabControl.TabPages.Add(page);
+
+            // --- LOGIKA PORÓWNYWANIA ---
+
+            btnSwap.Click += (s, e) =>
+            {
+                var tmp = _txtDiffLeft.Text;
+                _txtDiffLeft.Text = _txtDiffRight.Text;
+                _txtDiffRight.Text = tmp;
+            };
+
+            btnCompare.Click += (s, e) =>
+            {
+                CompareTexts(_txtDiffLeft, _txtDiffRight, chkIgnoreCase.Checked, chkIgnoreWhitespace.Checked, lblInfo);
+            };
+        }
+
+        /// <summary>
+        /// Tworzy edytor do porównywania: panel z numerami linii + RichTextBox ze scrollbarami.
+        /// (POPRAWA CS1628 – używamy lokalnej zmiennej rtb zamiast parametru out w lambdach)
+        /// </summary>
+        private void CreateDiffEditor(Control parent, out RichTextBox editor)
+        {
+            var table = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1
+            };
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            var gutter = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(45, 45, 48)
+            };
+
+            var rtb = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                BorderStyle = BorderStyle.None,
+                Font = _fontCode,
+                AcceptsTab = true,
+                WordWrap = false,
+                ScrollBars = RichTextBoxScrollBars.Both,
+                BackColor = Color.White,
+                ForeColor = Color.Black
+            };
+
+            // używamy rtb (lokalna zmienna), nie parametru out 'editor'
+            gutter.Paint += (s, e) => PaintLineNumbers(e.Graphics, gutter, rtb);
+            rtb.VScroll += (s, e) => gutter.Invalidate();
+            rtb.TextChanged += (s, e) => gutter.Invalidate();
+            rtb.Resize += (s, e) => gutter.Invalidate();
+
+            table.Controls.Add(gutter, 0, 0);
+            table.Controls.Add(rtb, 1, 0);
+
+            parent.Controls.Add(table);
+
+            // dopiero na końcu przypisujemy do parametru out
+            editor = rtb;
+        }
+
+        private void PaintLineNumbers(Graphics g, Panel gutter, RichTextBox editor)
+        {
+            g.Clear(gutter.BackColor);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            try
+            {
+                int firstCharIndex = editor.GetCharIndexFromPosition(new Point(0, 0));
+                int firstLine = editor.GetLineFromCharIndex(firstCharIndex);
+
+                int lineHeight = TextRenderer.MeasureText("X", editor.Font).Height;
+                int y = 2;
+                int line = firstLine;
+
+                while (y < gutter.Height && line < editor.Lines.Length)
+                {
+                    string text = (line + 1).ToString();
+
+                    var rect = new Rectangle(0, y, gutter.Width - 4, lineHeight);
+                    TextRenderer.DrawText(
+                        g,
+                        text,
+                        editor.Font,
+                        rect,
+                        Color.LightGray,
+                        TextFormatFlags.Right | TextFormatFlags.VerticalCenter
+                    );
+
+                    y += lineHeight;
+                    line++;
+                }
+
+                g.DrawLine(Pens.DimGray, gutter.Width - 1, 0, gutter.Width - 1, gutter.Height);
+            }
+            catch
+            {
+                // bez crash na Paint
+            }
+        }
+
+        /// <summary>
+        /// Porównuje dwa teksty linia po linii, podświetla różnice i wyświetla ostrzeżenie,
+        /// jeśli różnice to głównie puste linie / białe znaki (np. "dużo enterów").
+        /// </summary>
+        private void CompareTexts(
+            RichTextBox left,
+            RichTextBox right,
+            bool ignoreCase,
+            bool ignoreWhitespace,
+            Label infoLabel)
+        {
+            int leftSelStart = left.SelectionStart;
+            int leftSelLength = left.SelectionLength;
+            int rightSelStart = right.SelectionStart;
+            int rightSelLength = right.SelectionLength;
+
+            // reset kolorów tła
+            left.SelectAll();
+            left.SelectionBackColor = Color.White;
+            right.SelectAll();
+            right.SelectionBackColor = Color.White;
+
+            var leftLines = left.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            var rightLines = right.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+            string NormalizeForWarning(string s) =>
+                string.Join("\n",
+                    s.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+                     .Select(l => l.Trim())
+                     .Where(l => l.Length > 0)
+                );
+
+            var normLeft = NormalizeForWarning(left.Text);
+            var normRight = NormalizeForWarning(right.Text);
+
+            bool onlyWhitespaceDiff = normLeft == normRight && left.Text != right.Text;
+
+            int max = Math.Max(leftLines.Length, rightLines.Length);
+            int diffCount = 0;
+
+            for (int i = 0; i < max; i++)
+            {
+                string l = i < leftLines.Length ? leftLines[i] : string.Empty;
+                string r = i < rightLines.Length ? rightLines[i] : string.Empty;
+
+                string lCmp = l;
+                string rCmp = r;
+
+                if (ignoreWhitespace)
+                {
+                    lCmp = lCmp.Trim();
+                    rCmp = rCmp.Trim();
+                }
+
+                if (ignoreCase)
+                {
+                    lCmp = lCmp.ToLowerInvariant();
+                    rCmp = rCmp.ToLowerInvariant();
+                }
+
+                if (lCmp == rCmp)
+                    continue;
+
+                diffCount++;
+
+                if (i < leftLines.Length)
+                    HighlightEditorLine(left, i, Color.FromArgb(255, 230, 180));   // pomarańcz
+                if (i < rightLines.Length)
+                    HighlightEditorLine(right, i, Color.FromArgb(180, 220, 255));  // jasny niebieski
+            }
+
+            if (diffCount == 0)
+            {
+                infoLabel.ForeColor = Color.ForestGreen;
+                infoLabel.Text = "Teksty są identyczne (po uwzględnieniu wybranych opcji).";
+            }
+            else
+            {
+                infoLabel.ForeColor = onlyWhitespaceDiff ? Color.DarkOrange : Color.Firebrick;
+                if (onlyWhitespaceDiff)
+                {
+                    infoLabel.Text = $"Różnice w {diffCount} liniach – wygląda na to, że to głównie puste linie / białe znaki (np. dodatkowe ENTER-y).";
+                }
+                else
+                {
+                    infoLabel.Text = $"Znaleziono różnice w {diffCount} liniach.";
+                }
+            }
+
+            left.Select(leftSelStart, leftSelLength);
+            right.Select(rightSelStart, rightSelLength);
+        }
+
+        /// <summary>
+        /// Podświetla cały wiersz w RichTextBox.
+        /// </summary>
+        private void HighlightEditorLine(RichTextBox editor, int lineIndex, Color backColor)
+        {
+            if (lineIndex < 0 || lineIndex >= editor.Lines.Length)
+                return;
+
+            int start = editor.GetFirstCharIndexFromLine(lineIndex);
+            if (start < 0) return;
+
+            int length;
+            if (lineIndex == editor.Lines.Length - 1)
+            {
+                length = editor.TextLength - start;
+            }
+            else
+            {
+                int next = editor.GetFirstCharIndexFromLine(lineIndex + 1);
+                if (next < 0) next = editor.TextLength;
+                length = next - start;
+            }
+
+            if (length <= 0) return;
+
+            int oldStart = editor.SelectionStart;
+            int oldLength = editor.SelectionLength;
+
+            editor.Select(start, length);
+            editor.SelectionBackColor = backColor;
+
+            editor.Select(oldStart, oldLength);
+        }
+
         // FILTROWANIE (pole „Szukaj” na dole)
         private void FilterGrid(string text)
         {
@@ -1686,8 +1944,8 @@ namespace SnippetMgr
 
             var page = _tabControl.SelectedTab;
 
-            // SQL Lab nie filtrujemy
-            if (page.Text.StartsWith("1. SQL"))
+            // SQL Lab i Porównywanie nie filtrujemy
+            if (page.Text.StartsWith("1. SQL") || page.Text.StartsWith("6. Porównywanie"))
                 return;
 
             var split = page.Controls.OfType<SplitContainer>().FirstOrDefault();
@@ -1742,7 +2000,7 @@ namespace SnippetMgr
         }
 
         // ENTER w polu szukania = uruchom pierwszy wynik
-        // F5 = uruchom SQL + generuj skrypt (Własny SQL)
+        // F5 = uruchom SQL
         // CTRL+1..CTRL+9 = przełącz zakładki
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
@@ -1815,7 +2073,7 @@ namespace SnippetMgr
                 }
             }
 
-            // F5 = uruchom SQL z "1. SQL..." → Własny SQL
+            // F5 = uruchom SQL z "1. SQL"
             if (keyData == Keys.F5)
             {
                 if (_tabControl.SelectedTab != null && _tabControl.SelectedTab.Text.StartsWith("1. SQL"))
