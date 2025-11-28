@@ -1,0 +1,243 @@
+﻿{
+  "configName": "DEV-Profil-Ultimate",
+  "config": {
+    "sql": {
+      "server": "LOCALHOST\\SQLEXPRESS",
+      "useWindowsAuth": true,
+      "user": "",
+      "password": "",
+      "useTempTables": true,
+      "tempTablePrefix": "#",
+      "defaultDatabase": "master"
+    },
+    "ui": {
+      "startMinimized": false,
+      "alwaysOnTop": false,
+      "hotkey": "Win+Y"
+    },
+    "behavior": {
+      "autoPasteOnSnippetSelect": true,
+      "rememberLastTab": true,
+      "clearSearchOnTabChange": true,
+      "focusSearchOnTabChange": true
+    }
+  },
+
+  "sqlSnippets": [
+    {
+      "shortcut": "s*",
+      "description": "SELECT * FROM ...",
+      "paste_text": "SELECT * FROM "
+    },
+    {
+      "shortcut": "s100",
+      "description": "SELECT TOP 100",
+      "paste_text": "SELECT TOP 100 * FROM "
+    },
+    {
+      "shortcut": "scf",
+      "description": "SELECT COUNT(*)",
+      "paste_text": "SELECT COUNT(*) FROM "
+    },
+    {
+      "shortcut": "w",
+      "description": "WHERE clause",
+      "paste_text": "WHERE "
+    },
+    {
+      "shortcut": "ob",
+      "description": "ORDER BY",
+      "paste_text": "ORDER BY 1 DESC"
+    },
+    {
+      "shortcut": "gb",
+      "description": "GROUP BY",
+      "paste_text": "GROUP BY "
+    },
+
+    {
+      "shortcut": "ii",
+      "description": "INSERT INTO",
+      "paste_text": "INSERT INTO TableName (Col1, Col2)\nVALUES (Val1, Val2);"
+    },
+    {
+      "shortcut": "uu",
+      "description": "UPDATE statement",
+      "paste_text": "UPDATE t\nSET t.Col = 'Val'\nFROM TableName t\nWHERE t.Id = 1;"
+    },
+    {
+      "shortcut": "dd",
+      "description": "DELETE statement",
+      "paste_text": "DELETE FROM TableName\nWHERE Id = 1;"
+    },
+
+    {
+      "shortcut": "ji",
+      "description": "INNER JOIN",
+      "paste_text": "INNER JOIN TableName t ON t.Id = x.Id"
+    },
+    {
+      "shortcut": "jl",
+      "description": "LEFT JOIN",
+      "paste_text": "LEFT JOIN TableName t ON t.Id = x.Id"
+    },
+
+    {
+      "shortcut": "try",
+      "description": "TRY...CATCH Block",
+      "paste_text": "BEGIN TRY\n    -- Your code here\nEND TRY\nBEGIN CATCH\n    PRINT ERROR_MESSAGE();\n    -- THROW;\nEND CATCH"
+    },
+    {
+      "shortcut": "tran",
+      "description": "Transaction Template",
+      "paste_text": "BEGIN TRANSACTION;\nBEGIN TRY\n    -- Your code here\n    COMMIT TRANSACTION;\nEND TRY\nBEGIN CATCH\n    ROLLBACK TRANSACTION;\n    THROW;\nEND CATCH"
+    },
+    {
+      "shortcut": "if",
+      "description": "IF ... ELSE",
+      "paste_text": "IF (1=1)\nBEGIN\n    -- True\nEND\nELSE\nBEGIN\n    -- False\nEND"
+    },
+    {
+      "shortcut": "ife",
+      "description": "IF EXISTS",
+      "paste_text": "IF EXISTS (SELECT 1 FROM TableName WHERE Id = 1)\nBEGIN\n    \nEND"
+    },
+    {
+      "shortcut": "while",
+      "description": "WHILE Loop",
+      "paste_text": "DECLARE @i INT = 0;\nWHILE @i < 10\nBEGIN\n    SET @i = @i + 1;\n    -- Code\nEND"
+    },
+    {
+      "shortcut": "cursor",
+      "description": "Cursor Template (Fast Forward)",
+      "paste_text": "DECLARE @Id INT;\nDECLARE cur CURSOR FAST_FORWARD FOR\n    SELECT Id FROM TableName;\n\nOPEN cur;\nFETCH NEXT FROM cur INTO @Id;\n\nWHILE @@FETCH_STATUS = 0\nBEGIN\n    -- Logic here\n    FETCH NEXT FROM cur INTO @Id;\nEND\n\nCLOSE cur;\nDEALLOCATE cur;"
+    },
+
+    {
+      "shortcut": "cte",
+      "description": "Common Table Expression (CTE)",
+      "paste_text": ";WITH CteName AS (\n    SELECT Col1, Col2 \n    FROM TableName\n)\nSELECT * FROM CteName;"
+    },
+    {
+      "shortcut": "temp",
+      "description": "Create #Temp Table",
+      "paste_text": "IF OBJECT_ID('tempdb..#Temp') IS NOT NULL DROP TABLE #Temp;\nCREATE TABLE #Temp (\n    Id INT,\n    Name NVARCHAR(100)\n);"
+    },
+    {
+      "shortcut": "tvar",
+      "description": "Declare @Table Variable",
+      "paste_text": "DECLARE @Tbl TABLE (Id INT, Val VARCHAR(50));\nINSERT INTO @Tbl VALUES (1, 'Test');"
+    },
+
+    {
+      "shortcut": "proc",
+      "description": "Create Procedure",
+      "paste_text": "CREATE OR ALTER PROCEDURE dbo.usp_ProcName\n    @Param1 INT\nAS\nBEGIN\n    SET NOCOUNT ON;\n    -- Body\nEND"
+    },
+    {
+      "shortcut": "func",
+      "description": "Create Function (Scalar)",
+      "paste_text": "CREATE FUNCTION dbo.udf_FuncName (@Val INT)\nRETURNS INT\nAS\nBEGIN\n    RETURN @Val * 2;\nEND"
+    },
+
+    {
+      "shortcut": "rn",
+      "description": "ROW_NUMBER()",
+      "paste_text": "ROW_NUMBER() OVER (PARTITION BY Col1 ORDER BY Col2 DESC)"
+    },
+    {
+      "shortcut": "case",
+      "description": "CASE WHEN",
+      "paste_text": "CASE WHEN Col1 = 1 THEN 'Yes' ELSE 'No' END"
+    },
+    {
+      "shortcut": "cast",
+      "description": "CAST AS",
+      "paste_text": "CAST(Col AS INT)"
+    },
+    {
+      "shortcut": "conv",
+      "description": "CONVERT Date",
+      "paste_text": "CONVERT(VARCHAR(10), GETDATE(), 120)"
+    },
+    {
+      "shortcut": "date",
+      "description": "GETDATE()",
+      "paste_text": "GETDATE()"
+    },
+    {
+      "shortcut": "like",
+      "description": "LIKE %...%",
+      "paste_text": "LIKE '%Text%'"
+    },
+    {
+      "shortcut": "coal",
+      "description": "COALESCE (Is Null)",
+      "paste_text": "COALESCE(Val, 0)"
+    },
+
+    {
+      "shortcut": "who",
+      "description": "sp_who2 active",
+      "paste_text": "EXEC sp_who2 'active';"
+    },
+    {
+      "shortcut": "locks",
+      "description": "Check Locks",
+      "paste_text": "SELECT * FROM sys.dm_tran_locks WHERE resource_database_id = DB_ID();"
+    },
+    {
+      "shortcut": "space",
+      "description": "Check Table Size",
+      "paste_text": "EXEC sp_spaceused 'TableName';"
+    },
+    {
+      "shortcut": "def",
+      "description": "View Definition",
+      "paste_text": "SELECT OBJECT_DEFINITION(OBJECT_ID('ObjectName'));"
+    }
+  ],
+
+  "apps": [
+    {
+      "shortcut": "calc",
+      "description": "Kalkulator",
+      "app_path": "calc.exe"
+    },
+    {
+      "shortcut": "notepad",
+      "description": "Notatnik",
+      "app_path": "notepad.exe"
+    },
+    {
+      "shortcut": "cmd",
+      "description": "Wiersz poleceń (Admin)",
+      "app_path": "cmd.exe",
+      "run_as_admin": true
+    }
+  ],
+
+  "folders": [
+    {
+      "shortcut": "root",
+      "description": "Dysk C",
+      "folder_path": "C:\\"
+    },
+    {
+      "shortcut": "temp",
+      "description": "Folder Temp",
+      "folder_path": "C:\\Temp"
+    }
+  ],
+
+  "notes": [
+    {
+      "title": "Witaj w SnippetMgr",
+      "description": "Krótka instrukcja",
+      "note_text": "Użyj Win+Y aby pokazać/ukryć okno.\nWpisz skrót i naciśnij Enter, aby użyć.",
+      "tags": [ "info", "help" ],
+      "pinned": true,
+      "color": "#E0F7FA"
+    }
+  ]
+}

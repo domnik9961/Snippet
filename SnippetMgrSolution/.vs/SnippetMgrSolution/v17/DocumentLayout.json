@@ -1,0 +1,214 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\sqleditor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\sqleditor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\services.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\services.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\contracts.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\contracts.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\noteeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\noteeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\snippetmgrsolution\\noteeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\noteeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\templates.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\templates.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\form1.designer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\form1.designer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\entryeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\entryeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|c:\\users\\ddsoc\\source\\repos\\snippetmgrsolution\\snippetmgrsolution\\sqlsyntaxhighlighter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\sqlsyntaxhighlighter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\snippetmgrsolution\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
+      "RelativeMoniker": "D:0:0:{BBF52DB8-5A85-42B8-A26F-0143F6CECAE0}|SnippetMgrSolution\\SnippetMgrSolution.csproj|solutionrelative:snippetmgrsolution\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 5,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "NoteEditorForm.cs [Design]",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\NoteEditorForm.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\NoteEditorForm.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\NoteEditorForm.cs [Design]",
+              "RelativeToolTip": "SnippetMgrSolution\\NoteEditorForm.cs [Design]",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-27T13:01:48.5Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Form1.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Form1.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\Form1.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Form1.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\Form1.cs",
+              "ViewState": "AgIAABIHAAAAAAAAAAAswDUHAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-21T11:19:31.063Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Services.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Services.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\Services.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Services.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\Services.cs",
+              "ViewState": "AgIAAIICAAAAAAAAAAAiwKMCAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-27T07:26:39.786Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Contracts.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Contracts.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\Contracts.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Contracts.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\Contracts.cs",
+              "ViewState": "AgIAAIMAAAAAAAAAAAAswKYAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-27T07:18:49.2Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "templates.json",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\templates.json",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\templates.json",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\templates.json",
+              "RelativeToolTip": "SnippetMgrSolution\\templates.json",
+              "ViewState": "AgIAAAkAAAAAAAAAAAAAABoAAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2025-11-27T06:53:57.119Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "SqlEditor.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\SqlEditor.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\SqlEditor.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\SqlEditor.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\SqlEditor.cs",
+              "ViewState": "AgIAAHoCAAAAAAAAAAAswI0CAAARAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-21T14:22:18.918Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "EntryEditorForm.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\EntryEditorForm.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\EntryEditorForm.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\EntryEditorForm.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\EntryEditorForm.cs",
+              "ViewState": "AgIAAFQBAAAAAAAAAAAAAHIBAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-21T13:00:41.443Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "SqlSyntaxHighlighter.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\SqlSyntaxHighlighter.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\SqlSyntaxHighlighter.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\SqlSyntaxHighlighter.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\SqlSyntaxHighlighter.cs",
+              "ViewState": "AgIAAB0AAAAAAAAAAAAUwD4AAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-21T12:51:11.741Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "NoteEditorForm.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\NoteEditorForm.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\NoteEditorForm.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\NoteEditorForm.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\NoteEditorForm.cs",
+              "ViewState": "AgIAAJQAAAAAAAAAAAAswLcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-21T12:42:20.055Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "Program.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Program.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\Program.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Program.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\Program.cs",
+              "ViewState": "AgIAACIAAAAAAAAAAAAawDIAAAAQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-21T11:23:00.347Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "Form1.Designer.cs",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Form1.Designer.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\Form1.Designer.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Form1.Designer.cs",
+              "RelativeToolTip": "SnippetMgrSolution\\Form1.Designer.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABUAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-21T11:21:42.355Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "Form1.cs [Design]",
+              "DocumentMoniker": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Form1.cs",
+              "RelativeDocumentMoniker": "SnippetMgrSolution\\Form1.cs",
+              "ToolTip": "C:\\Users\\ddsoc\\source\\repos\\SnippetMgrSolution\\SnippetMgrSolution\\Form1.cs [Design]",
+              "RelativeToolTip": "SnippetMgrSolution\\Form1.cs [Design]",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-21T11:09:20.747Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "configName": "DEV-Profil",
+  "config": {
+    "sql": {
+      "server": "XYZ\\SQLEXPRESS",
+      "useWindowsAuth": true,
+      "user": "",
+      "password": "",
+      "useTempTables": true,
+      "tempTablePrefix": "#",
+      "defaultDatabase": "MojaDomyslnaBaza"
+    },
+    "ui": {
+      "startMinimized": false,
+      "alwaysOnTop": false,
+      "hotkey": "Win+Y"
+    },
+    "behavior": {
+      "autoPasteOnSnippetSelect": true,
+      "rememberLastTab": false,
+      "clearSearchOnTabChange": true,
+      "focusSearchOnTabChange": true
+    }
+  },
+
+  "sqlSnippets": [
+    {
+      "shortcut": "sel_top",
+      "description": "Prosty SELECT TOP",
+      "paste_text": "SELECT TOP (100) * FROM dbo.Customers;"
+    },
+    {
+      "shortcut": "join_ex",
+      "description": "JOIN z filtrem",
+      "paste_text": "SELECT c.CustomerID, o.OrderID\nFROM dbo.Customers c\nINNER JOIN dbo.Orders o ON o.CustomerID = c.CustomerID\nWHERE o.OrderDate >= '2024-01-01';"
+    }
+  ],
+
+  "apps": [
+    {
+      "shortcut": "calc",
+      "description": "Kalkulator Windows",
+      "paste_text": "Systemowy kalkulator",
+      "app_name": "Kalkulator",
+      "app_path": "C:\\Windows\\System32\\calc.exe",
+      "app_args": "",
+      "working_dir": "",
+      "run_as_admin": false
+    },
+    {
+      "shortcut": "notepad",
+      "description": "Notatnik",
+      "paste_text": "Windows Notepad",
+      "app_name": "Notatnik",
+      "app_path": "C:\\Windows\\System32\\notepad.exe",
+      "app_args": "",
+      "working_dir": "",
+      "run_as_admin": false
+    }
+  ],
+
+  "folders": [
+    {
+      "shortcut": "proj_root",
+      "description": "Folder główny projektu",
+      "paste_text": "C:\\Projekty\\MojaAplikacja",
+      "folder_path": "C:\\Projekty\\MojaAplikacja"
+    },
+    {
+      "shortcut": "docs",
+      "description": "Dokumentacja",
+      "paste_text": "C:\\Projekty\\MojaAplikacja\\Doc",
+      "folder_path": "C:\\Projekty\\MojaAplikacja\\Doc"
+    }
+  ],
+
+  "notes": [
+    {
+      "id": "n-001",
+      "title": "Szybkie tipy T-SQL",
+      "description": "Często używane wzorce",
+      "note_text": "1) Używaj SET NOCOUNT ON;\n2) Sprawdzaj plany zapytań.",
+      "tags": [ "sql", "tips" ],
+      "pinned": true,
+      "color": "#FFF8E1",
+      "created_at": "2025-01-10T10:00:00Z",
+      "updated_at": "2025-01-10T10:00:00Z"
+    },
+    {
+      "id": "n-002",
+      "title": "Lista TODO",
+      "description": "Najbliższe zadania",
+      "note_text": "- dodać obsługę transakcji w generatorze\n- test dla tempdb",
+      "tags": [ "todo" ],
+      "pinned": false,
+      "color": "#E3F2FD"
+    }
+  ]
+}

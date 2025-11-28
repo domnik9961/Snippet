@@ -1,0 +1,184 @@
+{
+  "configName": "DEV-Profil",
+  "config": {
+    "sql": {
+      "server": "XYZ\\SQLEXPRESS",
+      "useWindowsAuth": true,
+      "user": "",
+      "password": "",
+      "useTempTables": true,
+      "defaultDatabase": "MojaDomyslnaBaza"
+    },
+    "ui": {
+      "startMinimized": false,
+      "alwaysOnTop": false,
+      "hotkey": "Win\u002BY"
+    },
+    "behavior": {
+      "autoPasteOnSnippetSelect": true,
+      "rememberLastTab": false,
+      "clearSearchOnTabChange": true,
+      "focusSearchOnTabChange": true
+    }
+  },
+  "sqlSnippets": [
+    {
+      "shortcut": "sel_top",
+      "description": "Prosty SELECT TOP",
+      "title": "",
+      "paste_text": "SELECT TOP (100) * FROM dbo.Customers;",
+      "app_name": null,
+      "app_path": null,
+      "app_args": null,
+      "working_dir": null,
+      "run_as_admin": null,
+      "folder_path": null,
+      "note_text": null,
+      "pinned": false,
+      "color": null,
+      "tags": null
+    },
+    {
+      "shortcut": "join_ex",
+      "description": "JOIN z filtrem",
+      "title": "join_exx",
+      "paste_text": "SELECT c.CustomerID, o.OrderID\nFROM dbo.Customers c\nINNER JOIN dbo.Orders o ON o.CustomerID = c.CustomerID\nWHERE o.OrderDate \u003E= \u00272024-01-01\u0027;",
+      "app_name": null,
+      "app_path": null,
+      "app_args": null,
+      "working_dir": null,
+      "run_as_admin": null,
+      "folder_path": null,
+      "note_text": null,
+      "pinned": false,
+      "color": null,
+      "tags": null
+    }
+  ],
+  "apps": [
+    {
+      "shortcut": "calc",
+      "description": "Kalkulator Windows",
+      "title": null,
+      "paste_text": "Systemowy kalkulator",
+      "app_name": "Kalkulator",
+      "app_path": "C:\\Windows\\System32\\calc.exe",
+      "app_args": "",
+      "working_dir": "",
+      "run_as_admin": false,
+      "folder_path": null,
+      "note_text": null,
+      "pinned": null,
+      "color": null,
+      "tags": null
+    },
+    {
+      "shortcut": "notepad",
+      "description": "Notatnik",
+      "title": null,
+      "paste_text": "Windows Notepad",
+      "app_name": "Notatnik",
+      "app_path": "C:\\Windows\\System32\\notepad.exe",
+      "app_args": "",
+      "working_dir": "",
+      "run_as_admin": false,
+      "folder_path": null,
+      "note_text": null,
+      "pinned": null,
+      "color": null,
+      "tags": null
+    }
+  ],
+  "folders": [
+    {
+      "shortcut": "proj_root",
+      "description": "Folder g\u0142\u00F3wny projektu",
+      "title": null,
+      "paste_text": "C:\\Projekty\\MojaAplikacja",
+      "app_name": null,
+      "app_path": null,
+      "app_args": null,
+      "working_dir": null,
+      "run_as_admin": null,
+      "folder_path": "C:\\Projekty\\MojaAplikacja",
+      "note_text": null,
+      "pinned": null,
+      "color": null,
+      "tags": null
+    },
+    {
+      "shortcut": "docs",
+      "description": "Dokumentacja",
+      "title": null,
+      "paste_text": "C:\\Projekty\\MojaAplikacja\\Doc",
+      "app_name": null,
+      "app_path": null,
+      "app_args": null,
+      "working_dir": null,
+      "run_as_admin": null,
+      "folder_path": "C:\\Projekty\\MojaAplikacja\\Doc",
+      "note_text": null,
+      "pinned": null,
+      "color": null,
+      "tags": null
+    }
+  ],
+  "notes": [
+    {
+      "shortcut": null,
+      "description": "Cz\u0119sto u\u017Cywane wzorce",
+      "title": "Szybkie tipy T-SQL",
+      "paste_text": null,
+      "app_name": null,
+      "app_path": null,
+      "app_args": null,
+      "working_dir": null,
+      "run_as_admin": null,
+      "folder_path": null,
+      "note_text": "1) U\u017Cywaj SET NOCOUNT ON;\n2) Sprawdzaj plany zapyta\u0144.",
+      "pinned": true,
+      "color": "#FFF8E1",
+      "tags": [
+        "sql",
+        "tips"
+      ]
+    },
+    {
+      "shortcut": "",
+      "description": "Najbli\u017Csze zadania",
+      "title": "Lista TODO",
+      "paste_text": "- doda\u0107 obs\u0142ug\u0119 transakcji w generatorze\n- test dla tempdb",
+      "app_name": null,
+      "app_path": null,
+      "app_args": null,
+      "working_dir": null,
+      "run_as_admin": null,
+      "folder_path": null,
+      "note_text": "{\\rtf1\\ansi\\ansicpg1250\\deff0\\nouicompat\\deflang1045{\\fonttbl{\\f0\\fnil\\fcharset238 Consolas;}{\\f1\\fnil\\fcharset238 Segoe UI;}}\r\n{\\*\\generator Riched20 10.0.26100}\\viewkind4\\uc1 \r\n\\pard\\f0\\fs20 - doda\\\u0027e6 o\\f1 bs\\\u0027b3ug\\\u0027ea transakcji w generatorze\\par\r\n\\b - test dla tempdb\\b0\\par\r\n}\r\n",
+      "pinned": false,
+      "color": "#E3F2FD",
+      "tags": [
+        "todo"
+      ]
+    },
+    {
+      "shortcut": null,
+      "description": "da",
+      "title": "dfsd",
+      "paste_text": "adaasa",
+      "app_name": null,
+      "app_path": null,
+      "app_args": null,
+      "working_dir": null,
+      "run_as_admin": null,
+      "folder_path": null,
+      "note_text": "adaasa",
+      "pinned": false,
+      "color": null,
+      "tags": [
+        "aa"
+      ]
+    }
+  ],
+  "tabs": []
+}
